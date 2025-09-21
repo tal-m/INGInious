@@ -11,6 +11,7 @@ var draggable_sections = {};
 var draggable_tasks = {};
 var timeouts = [],  lastenter;
 var warn_before_exit = false;
+var dispenser_config = {};
 
 /*****************************
  *     Renaming Elements     *
@@ -32,6 +33,7 @@ function dispenser_util_rename_section(element, new_section) {
             draggable_tasks[section[0].id] = dispenser_util_make_tasks_list_sortable(section);
         }
         warn_before_exit = true;
+        dispenser_util_update_section_select();
     };
 
     input.focusout(quit);
@@ -123,13 +125,25 @@ function dispenser_util_add_tasks_to_section(button) {
 
     for (var i = 0; i < selected_tasks.length; i++) {
         warn_before_exit = true;
-        if(existing_task)
+        if(existing_task) {
             content.append($("#task_" + selected_tasks[i] + "_clone").clone().attr("id", 'task_' + selected_tasks[i]));
-        else {
+            if (!(selected_tasks[i] in dispenser_config))
+                dispenser_config[selected_tasks[i]] = {};
+        }
+	    else {
+            // Copy and add the new task
             var new_task_clone = $("#new_task_clone").clone();
             new_task_clone.attr("id", 'task_' + selected_tasks[i]);
-            new_task_clone.children(".task_name").append(selected_tasks[i]);
+            new_task_clone.html(new_task_clone.html().replaceAll("NEWTASKID", selected_tasks[i]));
+            new_task_clone.find(".task_settings").tooltip({"placement": "bottom"})
+            new_task_clone.find(".delete_task").tooltip({"placement": "bottom"})
             content.append(new_task_clone);
+
+            // Copy and add the new fields
+            var new_modal_clone = $("#edit-modals-template").clone();
+            new_modal_clone.html(new_modal_clone.html().replaceAll("NEWTASKID", selected_tasks[i]));
+            $("#edit-modals").append(new_modal_clone.children(".modal"));
+            $("#edit-modals").trigger("new_task");
             dispenser_add_task(selected_tasks[i]);
         }
     }
@@ -151,11 +165,17 @@ function dispenser_util_open_delete_modal(button) {
     }
 }
 
+function dispenser_util_delete_selection(keep_files) {
+    $(".grouped-actions-task:checked").each(function () {
+        let button = $("#task_" + $(this).data("taskid") + " button.delete_task");
+        dispenser_util_delete_task(button, keep_files, $(this).data("taskid"));
+    });
+}
+
 function dispenser_util_delete_section(button, keep_files) {
     const section = $("#" + button.getAttribute('data-target'));
     const parent = section.parent().closest(".sections_list");
     const wipe = $('#delete_section_modal .wipe_tasks').prop("checked");
-
 
     section.find(".task").each(function () {
         const taskid = this.id.to_taskid();
@@ -189,7 +209,8 @@ function dispenser_util_delete_task(button, keep_files, taskid){
     }
     const task = $("#task_" + taskid);
     const parent = task.closest(".tasks_list");
-    task.remove()
+    task.remove();
+    delete dispenser_config[taskid];
 
     warn_before_exit = true;
     dispenser_util_content_modified(parent);
@@ -198,6 +219,29 @@ function dispenser_util_delete_task(button, keep_files, taskid){
 /*******************************
  *  Adapt structure to change  *
  *******************************/
+
+function dispenser_toggle_adapt_viewport() {
+    let button = $("#compact-view");
+    if(button.hasClass("active"))
+        button.removeClass("active");
+    else
+        button.addClass("active");
+    dispenser_util_adapt_viewport();
+}
+
+function dispenser_util_adapt_viewport() {
+    $("#course_structure").removeAttr("style");
+    if($("#compact-view").hasClass("active")) {
+        var viewport_height = window.innerHeight;
+        var document_height = $("#main-content").innerHeight() + $("#inginious-top").innerHeight();
+        var overflow = document_height - viewport_height;
+        if (overflow > 0) {
+            $("#course_structure").height($("#course_structure").height() - overflow);
+            $("#course_structure").css("overflow", "auto");
+        }
+    }
+}
+
 function dispenser_util_adapt_size(element) {
     const level = Number($(element).parent().closest(".sections_list").attr("data-level")) + 1;
     $(element).attr("data-level", level);
@@ -232,6 +276,8 @@ function dispenser_util_content_modified(section) {
         }
         dispenser_util_section_to_empty(section);
     }
+    dispenser_util_update_section_select();
+    dispenser_util_adapt_viewport();
 }
 
 function dispenser_util_section_to_empty(section) {
@@ -259,6 +305,33 @@ function dispenser_util_empty_to_subsections(section) {
 function dispenser_util_empty_to_tasks(section) {
     section.removeClass("sections_list");
     section.find(".section_placeholder").remove();
+}
+
+/*******************/
+/* Grouped actions */
+/*******************/
+
+function dispenser_util_update_section_select() {
+    $("#grouped-actions-section-select").find("option").remove();
+    $("#course_structure .section").each(function () {
+        let id = this.id;
+        let level = $(this).data('level') - 3;
+        let title = "-".repeat(level) + " " + $(this).find(".title").first().text().trim();
+        let enabled = $(this).hasClass("tasks_list");
+        $("#grouped-actions-section-select").append($('<option>', { value: id, text: title, disabled: !enabled}));
+    });
+}
+
+function dispenser_util_move_selection() {
+    let dest = $("#grouped-actions-section-select :selected").val();
+    $(".grouped-actions-task:checked").each(function () {
+        let elem = $("#task_" + $(this).data("taskid"));
+        let source = elem.parent().parent();
+
+        elem.detach().appendTo($("#" + dest + " .list-group"));
+        dispenser_util_content_modified(source);
+    });
+    dispenser_util_content_modified($('#' + dest));
 }
 
 /****************************
@@ -349,10 +422,10 @@ function dispenser_util_make_sections_list_sortable(element) {
 /**********************
  *  Submit structure  *
  **********************/
+
 function dispenser_util_get_sections_list(element) {
     return element.children(".section").map(function (index) {
         const structure = {
-            "id": this.id.to_section_id(), "rank": index,
             "title": $(this).find(".title").first().text().trim(),
         };
 
@@ -363,10 +436,13 @@ function dispenser_util_get_sections_list(element) {
 
         const content = $(this).children(".content");
         if ($(this).hasClass("tasks_list")) {
-            structure["tasks_list"] = dispenser_util_get_tasks_list(content);
+            tasks_id = dispenser_util_get_tasks_list(content);
+            structure["tasks_list"] = tasks_id;
+
         } else if ($(this).hasClass("sections_list")) {
             structure["sections_list"] = dispenser_util_get_sections_list(content);
         }
+
         return structure;
     }).get();
 }
@@ -383,9 +459,9 @@ function dispenser_util_get_section_config(element) {
 }
 
 function dispenser_util_get_tasks_list(element) {
-    const tasks_list = {};
-    element.children(".task").each(function (index) {
-        tasks_list[this.id.to_taskid()] = index;
+    const tasks_list = [];
+    element.children(".task").each(function () {
+        tasks_list.push(this.id.to_taskid());
     });
     return tasks_list;
 }
@@ -406,12 +482,28 @@ function dispenser_add_task(taskid) {
     dispenser_new_tasks.push(taskid);
 }
 
+function dispenser_util_get_task_config() {
+    let tasks_config = {};
+    dispenser_util_get_tasks_list($('#course_structure .content')).forEach(function (elem) {
+        tasks_config[elem] = {};
+    });
+
+    return tasks_config;
+}
+
+function dispenser_util_structure() {
+    return JSON.stringify({
+        "toc": dispenser_util_get_sections_list($('#course_structure').children(".content")),
+        "config": dispenser_config
+    });
+}
+
 function dispenser_structure_toc() {
-    return JSON.stringify(dispenser_util_get_sections_list($('#course_structure').children(".content")));
+    return dispenser_util_structure();
 }
 
 function dispenser_structure_combinatory_test() {
-    return JSON.stringify(dispenser_util_get_sections_list($('#course_structure').children(".content")));
+    return dispenser_util_structure();
 }
 
 function dispenser_submit(dispenser_id) {

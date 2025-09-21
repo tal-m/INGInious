@@ -4,7 +4,7 @@
 # more information about the licensing of this file.
 
 """ Some basic functions for setuptools entrypoints """
-import pkg_resources
+import importlib.metadata
 import sys
 
 from inginious.common.filesystems.local import LocalFSProvider
@@ -12,7 +12,10 @@ from inginious.common.filesystems.local import LocalFSProvider
 def get_filesystems_providers():
     """ Returns a dictionnary of {"fs_name": fs_class}, for each usable FileSystemProvider"""
     providers = {"local": LocalFSProvider}
-    plugged_providers = pkg_resources.iter_entry_points("inginious.filesystems")
+    try:
+        plugged_providers = importlib.metadata.entry_points(group="inginious.filesystems")
+    except:  # < python3.10
+        plugged_providers = importlib.metadata.entry_points().get("inginious.filesystems", ())
     for pp in plugged_providers:
         providers[pp.name] = pp.load()
     return providers

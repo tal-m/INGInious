@@ -13,7 +13,7 @@
     <nav aria-label="breadcrumb">
         <ol class="breadcrumb">
             <li class="breadcrumb-item">
-                <a href="{{ get_homepath() }}/preferences" title="{{ _('Preferences') }}"  data-toggle="tooltip" data-placement="bottom"><i class="fa fa-gears"></i></a>
+                <a href="{{ get_path('preferences') }}" title="{{ _('Preferences') }}"  data-toggle="tooltip" data-placement="bottom"><i class="fa fa-gears"></i></a>
             </li>
             <li class="breadcrumb-item active"><a href="#"><i class="fa fa-user-times"></i> {{ _("Delete my account") }} <span class="sr-only"> {{ _("(current)") }}</span></a></li>
         </ol>
@@ -56,7 +56,7 @@
                     {{ _("This will also delete all your data ! Are you really sure ?") }}
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-default" data-dismiss="modal">{{ _("Cancel") }}</button>
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">{{ _("Cancel") }}</button>
                     <button type="submit" name="delete" class="btn btn-danger">{{ _("Delete my account") }}</button>
                 </div>
             </div>

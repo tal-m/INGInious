@@ -26,7 +26,7 @@ class CourseSubmissionsPage(INGIniousSubmissionsAdminPage):
         user_input["users"] = flask.request.form.getlist("users")
         user_input["audiences"] = flask.request.form.getlist("audiences")
         user_input["tasks"] = flask.request.form.getlist("tasks")
-        user_input["org_tags"] = flask.request.form.getlist("org_tasks")
+        user_input["org_categories"] = flask.request.form.getlist("org_categories")
 
         if "replay_submission" in user_input:
             # Replay a unique submission
@@ -34,7 +34,7 @@ class CourseSubmissionsPage(INGIniousSubmissionsAdminPage):
             if submission is None:
                 raise NotFound(description=_("This submission doesn't exist."))
 
-            self.submission_manager.replay_job(course.get_task(submission["taskid"]), submission)
+            self.submission_manager.replay_job(course.get_task(submission["taskid"]), submission, course.get_task_dispenser())
             return Response(response=json.dumps({"status": "waiting"}), content_type='application/json')
 
         elif "csv" in user_input or "download" in user_input or "replay" in user_input:
@@ -68,7 +68,7 @@ class CourseSubmissionsPage(INGIniousSubmissionsAdminPage):
 
                 tasks = course.get_tasks()
                 for submission in data:
-                    self.submission_manager.replay_job(tasks[submission["taskid"]], submission)
+                    self.submission_manager.replay_job(tasks[submission["taskid"]], submission, course.get_task_dispenser())
                 msgs.append(_("{0} selected submissions were set for replay.").format(str(len(data))))
                 return self.page(course, params, msgs=msgs)
 
@@ -91,7 +91,7 @@ class CourseSubmissionsPage(INGIniousSubmissionsAdminPage):
         user_input["users"] = flask.request.args.getlist("users")
         user_input["audiences"] = flask.request.args.getlist("audiences")
         user_input["tasks"] = flask.request.args.getlist("tasks")
-        user_input["org_tags"] = flask.request.args.getlist("org_tasks")
+        user_input["org_categories"] = flask.request.args.getlist("org_categories")
 
         if "download_submission" in user_input:
             submission = self.database.submissions.find_one({"_id": ObjectId(user_input["download_submission"]),
@@ -144,7 +144,7 @@ class CourseSubmissionsPage(INGIniousSubmissionsAdminPage):
             skip = (page-1) * limit
 
         return self.get_selected_submissions(course, only_tasks=user_input["tasks"],
-                                             only_tasks_with_categories=user_input["org_tags"],
+                                             only_tasks_with_categories=user_input["org_categories"],
                                              only_users=user_input["users"],
                                              only_audiences=user_input["audiences"],
                                              grade_between=[
@@ -219,7 +219,7 @@ class CourseSubmissionsPage(INGIniousSubmissionsAdminPage):
             d["best"] = d["_id"] in best_submissions_list  # mark best submissions
 
         if limit is not None:
-            number_of_pages = submissions_count // limit + (submissions_count % limit > 0)
+            number_of_pages = max(submissions_count // limit + (submissions_count % limit > 0), 1)
             return out, submissions_count, number_of_pages
         else:
             return out

@@ -411,6 +411,8 @@ function studio_init_template_code(well, pid, problem)
     var default_editor = registerCodeEditor(default_tag, 'text', default_tag.tagName === "INPUT" ? 1 : 10);
     if("default" in problem)
         default_editor.setValue(problem["default"]);
+    if("offset" in problem)
+        $('#offset-' + pid, well).val(problem["offset"]);
 }
 
 /**
@@ -446,6 +448,8 @@ function studio_init_template_file(well, pid, problem)
  */
 function studio_init_template_match(well, pid, problem)
 {
+    if("centralize" in problem && problem["centralize"])
+        $('#centralize-' + pid, well).attr('checked', true);
     if("answer" in problem)
         $('#answer-' + pid, well).val(problem["answer"]);
 }
@@ -634,17 +638,17 @@ function studio_get_feedback(sid)
  * Functions for tags edition. Use in tags.html
  */
 
-function studio_expand_tag_description(elem){
+function studio_expand_description(elem){
     elem.rows = 5;
 }
-function studio_expand_tag_description_not(elem){
+function studio_expand_description_not(elem){
     elem.rows = 1;
 }
 // Add a new line to the tag table
-function studio_add_tag_line(line) {
+function studio_add_table_line(line,target,target_blank_row) {
 
-    var new_row = $("#NEW").clone();
-    var new_id = 1 + parseInt($('#table tr:last').attr('id'));
+    var new_row = $("#"+target_blank_row).clone();
+    var new_id = 1 + parseInt($('#'+target+' tr:last').attr('id'));
     if (isNaN(new_id))
         new_id = 0
             
@@ -673,7 +677,7 @@ function studio_add_tag_line(line) {
     modified_row = modified_row.replace("type_replace_"+type, 'selected="selected"');
     modified_row = modified_row.replace("id_stop", "");
 
-    $('#table').find('tbody').append("<tr id="+new_id+">" + modified_row + "</tr>");
+    $('#'+target).find('tbody').append("<tr id="+new_id+">" + modified_row + "</tr>");
     new_row.show();
 }
 
@@ -689,15 +693,16 @@ function drag_drop_handler() {
 
     // Drag enter
     $(".upload-area").on('dragenter', function (e) {
-        $("#edit_task_tabs_content").append("<p id='dragtext'><b>Drag a file here</b></p>");
+        $("#dragtext").css("visibility", "visible");
+        $(this).addClass("dragin");
         e.stopPropagation();
         e.preventDefault();
-
     });
 
     // Drag over
     $(".upload-area").on('dragover', function (e) {
         $(this).addClass("dragin");
+        $("#dragtext").css("visibility", "visible");
         e.stopPropagation();
         e.preventDefault();
 
@@ -705,12 +710,14 @@ function drag_drop_handler() {
 
     $(".upload-area").on('dragleave',function(e){
         $(this).removeClass("dragin");
-        $("#dragtext").remove();
+        $("#dragtext").css("visibility", "hidden");
+        e.stopPropagation();
+        e.preventDefault();
     });
 
     // Drop
     $(".upload-area").on('drop', function (e) {
-        $("#dragtext").remove();
+        $("#dragtext").css("visibility", "hidden");
         e.stopPropagation();
         e.preventDefault();
 
@@ -719,11 +726,6 @@ function drag_drop_handler() {
         fd.append('file', file[0]);
         fd.append('name',file[0].name);
         uploadData(fd);
-    });
-
-    // Open file selector on div click
-    $(".upload-area").click(function(){
-        $("#file").click();
     });
 
     // file selected

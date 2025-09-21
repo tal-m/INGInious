@@ -12,7 +12,7 @@ import flask
 from gridfs import GridFS
 from flask import redirect, url_for
 from flask.views import MethodView
-from werkzeug.exceptions import NotFound, NotAcceptable
+from werkzeug.exceptions import NotFound, NotAcceptable, MethodNotAllowed
 
 from inginious.client.client import Client
 from inginious.common import custom_yaml
@@ -27,7 +27,6 @@ from pymongo.database import Database
 
 from inginious.frontend.course_factory import CourseFactory
 from inginious.frontend.task_factory import TaskFactory
-from inginious.frontend.lti_outcome_manager import LTIOutcomeManager
 
 
 class INGIniousPage(MethodView):
@@ -46,24 +45,32 @@ class INGIniousPage(MethodView):
         """ Returns the web application singleton """
         return flask.current_app
 
-    def _pre_check(self, sessionid):
-        # Check for language
+    def _pre_check(self):
+        """ Checks for language. """
         if "lang" in flask.request.args and flask.request.args["lang"] in self.app.l10n_manager.translations.keys():
             self.user_manager.set_session_language(flask.request.args["lang"])
-        elif "language" not in flask.session:
+        elif not self.user_manager.session_language(default=None):
             best_lang = flask.request.accept_languages.best_match(self.app.l10n_manager.translations.keys(),
                                                                   default="en")
             self.user_manager.set_session_language(best_lang)
 
-        return ""
+    def GET(self, *args, **kwargs):
+        """ Handles GET requests. It should be redefined by subclasses. """
+        raise MethodNotAllowed()
 
-    def get(self, sessionid, *args, **kwargs):
-        pre_check = self._pre_check(sessionid)
-        return pre_check if pre_check else self.GET(*args, **kwargs)
+    def POST(self, *args, **kwargs):
+        """ Handles POST requests. It should be redefined by subclasses. """
+        raise MethodNotAllowed()
 
-    def post(self, sessionid, *args, **kwargs):
-        pre_check = self._pre_check(sessionid)
-        return pre_check if pre_check else self.POST(*args, **kwargs)
+    def get(self, *args, **kwargs):
+        """ Interfaces INGInious pages with Flask views for GET requests. """
+        self._pre_check()
+        return self.GET(*args, **kwargs)
+
+    def post(self, *args, **kwargs):
+        """ Interfaces INGInious pages with Flask views for POST requests. """
+        self._pre_check()
+        return self.POST(*args, **kwargs)
 
     @property
     def plugin_manager(self) -> PluginManager:
@@ -139,11 +146,6 @@ class INGIniousPage(MethodView):
     def webterm_link(self) -> str:
         """ Returns the link to the web terminal """
         return self.app.webterm_link
-
-    @property
-    def lti_outcome_manager(self) -> LTIOutcomeManager:
-        """ Returns the LTIOutcomeManager singleton """
-        return self.app.lti_outcome_manager
 
     @property
     def webdav_host(self) -> str:

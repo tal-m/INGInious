@@ -4,7 +4,9 @@
 # more information about the licensing of this file.
 
 """ Tasks' problems """
+import importlib
 import gettext
+import inspect
 import sys
 import re
 from abc import ABCMeta, abstractmethod
@@ -12,8 +14,55 @@ from abc import ABCMeta, abstractmethod
 from inginious.common.base import id_checker
 
 
+def _get_problem_types(name: str, base_class) -> dict:
+    """ Generic function to get a mapping of Problem names and their associated class by 
+        inspecting a given module.
+
+        :param  name:       The name of the module to explore.
+        :param  base_class: The parent Problem class.
+        :return:            The mapping of problem name and problem class.
+    """
+    try:
+        """ Get the module by name """
+        myself = sys.modules[name]
+    except KeyError:
+        try:
+            """ If the module is not loaded, we try to load it """
+            myself = importlib.import_module(name)
+        except ModuleNotFoundError:
+            """ There is nothing much to do """
+            return None
+    
+    """ Search for child classes of `base_class` """
+    members = [member for (_, member) in inspect.getmembers(myself, inspect.isclass) 
+               if base_class in inspect.getmro(member) and member != base_class]
+
+    """ Return the mapping """
+    return {member.get_type(): member for member in members}
+
+def get_problem_types(name: str) -> dict:
+    """ Get the mapping of Problem types available by inspecting a given module.
+
+        :param  name:   The name of the module to inspect.
+        :return:        The mapping of problem name and problem class.
+    """
+    raw = _get_problem_types(name, Problem)
+    return {pbl_name: pbl_cls for pbl_name, pbl_cls in raw.items() if pbl_name is not None}
+
+def get_default_problem_types() -> dict:
+    """ Get the mapping of default Problem types available by inspecting the current module.
+
+        :return:    The mapping of problem name and problem class.
+    """
+    return get_problem_types(__name__)
+
+
 class Problem(object, metaclass=ABCMeta):
     """Basic problem """
+
+    @classmethod
+    def get_problem_type(cls):
+        return (cls.get_type(), cls)
 
     @classmethod
     @abstractmethod
@@ -84,8 +133,8 @@ class Problem(object, metaclass=ABCMeta):
     def get_translation_obj(self, language=None):
         return self._translations.get(language, gettext.NullTranslations())
 
-    def gettext(self, language, *args, **kwargs):
-        return self.get_translation_obj(language).gettext(*args, **kwargs)
+    def gettext(self, language, text):
+        return self.get_translation_obj(language).gettext(text)if text else ""
 
 
 class CodeProblem(Problem):
@@ -132,6 +181,18 @@ class CodeProblem(Problem):
 
     @classmethod
     def parse_problem(self, problem_content):
+        # Checking problem edit inputs
+        if len(problem_content["offset"]) == 0:
+            del problem_content["offset"]
+        else:
+            try:
+                offset = int(problem_content["offset"])
+                if offset < 1:
+                    raise Exception("Line offset must be positive!")
+                problem_content["offset"] = offset
+            except ValueError:
+                raise Exception("Line offset must be an integer!")
+
         return Problem.parse_problem(problem_content)
 
     @classmethod
@@ -175,7 +236,7 @@ class FileProblem(Problem):
             if problem_content["allowed_exts"] == "":
                 del problem_content["allowed_exts"]
             else:
-                problem_content["allowed_exts"] = problem_content["allowed_exts"].split(',')
+                problem_content["allowed_exts"] = [extension.strip() for extension in problem_content["allowed_exts"].split(',')]
 
         if "max_size" in problem_content:
             try:

@@ -8,18 +8,15 @@ import os
 import gettext
 import builtins
 
-try:
-    from importlib.metadata import version, PackageNotFoundError
-except ImportError:
-    from importlib_metadata import version, PackageNotFoundError
+from importlib.metadata import version, PackageNotFoundError
 
 try:
     __version__ = version(__name__)
 except PackageNotFoundError:
-    __version__ = "0.7.dev0"
+    __version__ = "0.9.dev0"
 
 MARKETPLACE_URL = "https://marketplace.inginious.org/marketplace.json"
-DB_VERSION = 15
+DB_VERSION = 17
 
 builtins.__dict__['_'] = gettext.gettext
 

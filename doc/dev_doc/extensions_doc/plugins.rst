@@ -27,7 +27,7 @@ The following code adds a new page displaying ``This is a simple demo plugin`` o
 
     def init(plugin_manager, course_factory, client, plugin_config):
         """ Init the plugin """
-        plugin_manager.add_page("/<cookieless:sessionid>plugindemo", DemoPage.as_view('demopage'))
+        plugin_manager.add_page("/plugindemo", DemoPage.as_view('demopage'))
 
 
 The plugin is initialized by the plugin manager, which is the frontend-extended hook manager, by calling method ``init``.
@@ -186,14 +186,6 @@ Each hook available in INGInious is described here, starting with its name and p
     ``default`` : Default value as specified in the configuration
 
     Overrides the course accessibility.
-``task_accessibility`` (``course``, ``taskid``, ``default``)
-    Returns: inginious.frontend.accessible_time.AccessibleTime
-
-    ``course`` : inginious.frontend.courses.Course
-
-    ``task`` : inginious.frontend.tasks.Task
-
-    ``default`` : Default value as specified in the configuration
 
     Overrides the task accessibility
 ``task_limits`` (``course``, ``taskid``, ``default``)
@@ -304,7 +296,7 @@ Additional subproblems
 ----------------------
 
 Additional subproblems can be defined and added via plugins. A basic example is available on GitHub repo
-`UCL-INGI/INGInious-problems-demo <https://github.com/UCL-INGI/INGInious-problems-demo>`_.
+`INGInious/problems-demo <https://github.com/INGInious/problems-demo>`_.
 
 Subproblems are defined at both the backend and frontend side. At the backend side, it consists of a class inheriting
 from ``inginious.common.tasks_problems.Problem`` and implementing the following abstract methods:

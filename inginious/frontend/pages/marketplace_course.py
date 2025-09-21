@@ -51,7 +51,7 @@ class MarketplaceCoursePage(INGIniousAuthPage):
             except ImportCourseException as e:
                 errors.append(str(e))
             if not errors:
-                return redirect(self.app.get_homepath() + "/admin/{}".format(new_courseid))
+                return redirect(self.app.get_path("course", new_courseid))
         return self.show_page(course, errors)
 
     def show_page(self, course, errors=None):

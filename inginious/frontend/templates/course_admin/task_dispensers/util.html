@@ -29,25 +29,54 @@
     .sections_list >div>div>div> .sections_list_option { display: block; }
 </style>
 
-<script>
-    $(function () {
-        $(".tasks_list").each(function(){
-            draggable_tasks[this.id] = dispenser_util_make_tasks_list_sortable($(this));
-        });
-
-        $(".sections_list").each(function(){
-            draggable_sections[this.id] = dispenser_util_make_sections_list_sortable($(this));
-        });
-    });
-</script>
-
-{% with section=True %}
+{% with type="section" %}
     {% include "course_admin/task_dispensers/util_delete_modal.html" %}
 {% endwith %}
 
-{% with section=False %}
+{% with type="task" %}
     {% include "course_admin/task_dispensers/util_delete_modal.html" %}
 {% endwith %}
+
+{% with type="grouped_actions" %}
+    {% include "course_admin/task_dispensers/util_delete_modal.html" %}
+{% endwith %}
+
+{% include "course_admin/task_dispensers/util_move_modal.html" %}
+
+<div id="edit-modals">
+<div class="modal fade" id="grouped-actions-edit" tabindex="-1" role="dialog" aria-labelledby="LabelModel">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+        <div class="modal-header">
+            <h5 class="modal-title">{{ _("Edit selected tasks") }}</h5>
+            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+        <div class="col-md-12 mb-3">
+            {% for config_item in course.get_task_dispenser().config_items %}
+                <div class="pills pills-{{ config_item.get_id() }}" style="display: none;">
+                {% with grouped=True %}
+                    {% include config_item.get_template() %}
+                {% endwith %}
+                </div>
+            {% endfor %}
+        </div>
+
+        <div class="modal-footer">
+            <button type="button" class="btn btn-primary" data-dismiss="modal">{{ _("Close") }}</button>
+        </div>
+        </div>
+    </div>
+</div>
+{% include "course_admin/task_dispensers/util_task_edit_modal.html" %}
+</div>
+
+<div id="edit-modals-template">
+{% with taskid="NEWTASKID" %}
+    {% include "course_admin/task_dispensers/util_task_edit_modal.html" %}
+{% endwith %}
+</div>
 
 <div class="modal fade" id="addTaskModal" role="dialog">
     <div class="modal-dialog modal-lg">
@@ -88,19 +117,103 @@
 <div id="all_tasks" style="display: none">
     {% for taskid in tasks %}
         <div id="task_{{ taskid }}_clone" class="task handle list-group-item list-group-item-action d-flex">
-            <div class="task_name p-0">
-                {{ tasks[taskid]["name"] }}
+            <input type="checkbox" class="grouped-actions grouped-actions-task mt-auto mb-auto mr-3" data-taskid="{{ taskid }}" />
+            <div class="task_name mt-auto mb-auto">
+                <p class="m-0 font-weight-bold">{{ tasks[taskid]["name"] }}</p>
+                {% for config_item in course.get_task_dispenser().config_items %}
+                <p class="m-0 font-italic pills pills-{{ config_item.get_id() }}" style="display: none;">
+                    {% with short=True %}
+                        {% include config_item.get_template() %}
+                    {% endwith %}
+                </p>
+                {% endfor %}
             </div>
             {% include "course_admin/task_dispensers/task_buttons.html" %}
         </div>
     {% endfor %}
     <div id="new_task_clone" class="task handle list-group-item list-group-item-action d-flex">
-        <div class="task_name p-0">{{ _("New task with id: ") }}</div>
-        <div class="ml-auto">
-            <button class="delete_task btn btn-sm btn-warning" onclick="dispenser_util_delete_task(this, true, this.closest('.task').id.to_taskid())"
-                    title="{{ _('Delete invalid task') }}" style="font-size: 1em;" data-toggle="tooltip" data-placement="bottom">
+        <input type="checkbox" class="grouped-actions grouped-actions-task mt-auto mb-auto mr-3" data-taskid="NEWTASKID" />
+        <div class="task_name mt-auto mb-auto">
+            <p class="m-0 font-weight-bold">{{ _("New task with id: ") }} NEWTASKID</p>
+            {% for config_item in course.get_task_dispenser().config_items %}
+            <p class="m-0 font-italic pills pills-{{ config_item.get_id() }}" style="display: none;">
+                {% with short=True, taskid="NEWTASKID" %}
+                    {% include config_item.get_template() %}
+                {% endwith %}
+            </p>
+            {% endfor %}
+        </div>
+        <div class="ml-auto btn-group btn-group-sm" role="group">
+            <a class="task_settings btn btn-primary m-auto" data-toggle="modal" data-target="#edit_NEWTASKID"
+                    title="{{ _('Task settings') }}">
+                <i class="fa fa-cogs" aria-hidden="true"></i>
+            </a>
+            <button class="delete_task btn btn-warning m-auto" onclick="dispenser_util_delete_task(this, false, this.closest('.task').id.to_taskid())"
+                    title="{{ _('Delete task') }}" style="font-size: 1em;" data-toggle="tooltip" data-placement="bottom">
                 <i class="fa fa-trash"></i>
             </button>
         </div>
     </div>
 </div>
+
+<ul class="nav nav-pills mb-3 small">
+    <li class="nav-item dropdown">
+        <a class="nav-link dropdown-toggle" data-toggle="dropdown" href="#" role="button" aria-haspopup="true" aria-expanded="false">{{ _("Grouped actions") }}</a>
+        <div class="dropdown-menu">
+            <a class="dropdown-item disabled" href="#" id="change-settings" data-toggle="modal" data-target="#grouped-actions-edit"><i class="fa fa-cogs"></i> {{ _("Change selection") }}</a>
+            <div class="dropdown-divider"></div>
+            <a class="dropdown-item" href="#" data-toggle="modal" data-target="#grouped_actions_move_modal"><i class="fa fa-arrow-right"></i> {{ _("Move to section...") }}</a>
+            <a class="dropdown-item" href="#" data-toggle="modal" data-target="#delete_grouped_actions_modal"><i class="fa fa-trash"></i> {{ _("Delete") }}</a>
+            <div class="dropdown-divider"></div>
+            <a id="compact-view" class="dropdown-item active" href="#" onclick="dispenser_toggle_adapt_viewport()"><i class="fa fa-eye"></i> {{ _("Compact view") }}</a>
+        </div>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link disabled" href="#">{{ _("On setting: ") }}</a>
+    </li>
+    {% for config_item in course.get_task_dispenser().config_items %}
+    <li class="nav-item">
+        <a class="nav-link setting-filter" data-filter="{{ config_item.get_id() }}" href="#">{{ config_item.get_name() }}</a>
+    </li>
+    {% endfor %}
+</ul>
+
+<script>
+    $(".setting-filter").click(function () {
+        if($(this).hasClass("active")) {
+            $("#change-settings").addClass("disabled");
+            $(".setting-filter").removeClass("active");
+            $(".pills").hide();
+        } else {
+            $(".setting-filter").removeClass("active");
+            $("#change-settings").removeClass("disabled");
+            $(this).addClass("active");
+            $(".pills").hide();
+            $(".pills-" + $(this).data("filter")).show();
+        }
+    });
+
+    $(function() {
+        $(".task_settings").tooltip({"placement": "bottom"});
+        $(".delete_task").tooltip({"placement": "bottom"});
+
+        $(".tasks_list").each(function(){
+            draggable_tasks[this.id] = dispenser_util_make_tasks_list_sortable($(this));
+        });
+
+        $(".sections_list").each(function(){
+            draggable_sections[this.id] = dispenser_util_make_sections_list_sortable($(this));
+        });
+
+        $(".grouped-actions-section").change(function () {
+            let id = $(this).data("section");
+            let val = this.checked;
+            $("#" + id + " .grouped-actions").each(function () {
+                $(this).prop("checked", val);
+            });
+        });
+
+        dispenser_util_adapt_viewport();
+        $(window).on( "resize", dispenser_util_adapt_viewport);
+    });
+</script>

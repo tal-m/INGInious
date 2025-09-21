@@ -9,6 +9,8 @@ import re
 import flask
 from pymongo import ReturnDocument
 from werkzeug.exceptions import NotFound
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError
 
 from inginious.frontend.pages.utils import INGIniousAuthPage
 from inginious.frontend.user_manager import UserManager
@@ -41,8 +43,9 @@ class ProfilePage(INGIniousAuthPage):
                     msg = _("Incorrect email.")
                     return result, msg, error
                 else:
-                    self.user_manager.connect_user(result["username"], result["realname"], result["email"],
-                                                   result["language"], result.get("tos_accepted", False))
+                    self.user_manager.set_session_username(data["username"])
+
+        profile_data_to_be_updated = {}
 
         # Check if updating the password.
         if self.app.allow_registration and len(data["passwd"]) in range(1, 6):
@@ -54,49 +57,56 @@ class ProfilePage(INGIniousAuthPage):
             msg = _("Passwords don't match !")
             return result, msg, error
         elif self.app.allow_registration and len(data["passwd"]) >= 6:
-            oldpasswd_hash = UserManager.hash_password(data["oldpasswd"])
-            passwd_hash = UserManager.hash_password(data["passwd"])
 
-            match = {"username": self.user_manager.session_username()}
             if "password" in userdata:
-                match["password"] = oldpasswd_hash
+                user = self.user_manager.auth_user(self.user_manager.session_username(), data["oldpasswd"], False)
+            else:
+                user = self.database.users.find_one({"username": userdata["username"]})
 
-            result = self.database.users.find_one_and_update(match,
-                                                             {"$set": {"password": passwd_hash}},
-                                                             return_document=ReturnDocument.AFTER)
-            if not result:
+            if user is None:
                 error = True
                 msg = _("Incorrect old password.")
                 return result, msg, error
+            else:
+                passwd_hash = UserManager.hash_password(data["passwd"])
+                profile_data_to_be_updated["password"] = passwd_hash
 
         # Check if updating language
-        if data["language"] != userdata["language"]:
+        if data["language"] != userdata.get("language", "en"):
             language = data["language"] if data["language"] in self.app.available_languages else "en"
-            result = self.database.users.find_one_and_update({"username": self.user_manager.session_username()},
-                                                             {"$set": {"language": language}},
-                                                             return_document=ReturnDocument.AFTER)
-            if not result:
-                error = True
-                msg = _("Incorrect username.")
-                return result, msg, error
-            else:
-                self.user_manager.set_session_language(language)
+            profile_data_to_be_updated["language"] = language
+
+        # check if updating code indentation
+        if data["code_indentation"] != userdata.get("code_indentation", "4"):
+            code_indentation = data["code_indentation"] if data["code_indentation"] in self.app.available_indentation_types.keys() else "4"
+            profile_data_to_be_updated["code_indentation"] = code_indentation
 
         # Checks if updating name
-        if len(data["realname"]) > 0:
-            result = self.database.users.find_one_and_update({"username": self.user_manager.session_username()},
-                                                             {"$set": {"realname": data["realname"]}},
-                                                             return_document=ReturnDocument.AFTER)
+        if data["realname"] != userdata.get("realname", ""):
+            if len(data["realname"]) > 0:
+                profile_data_to_be_updated["realname"] = data["realname"]
+            else:
+                error = True
+                msg = _("Name is too short.")
+                return result, msg, error
+
+        # updating profile in DB
+        if profile_data_to_be_updated:
+            self.database.users.find_one_and_update({"username": self.user_manager.session_username()},
+                                                    {"$set": profile_data_to_be_updated},
+                                                    return_document=ReturnDocument.AFTER)
             if not result:
                 error = True
                 msg = _("Incorrect username.")
                 return result, msg, error
             else:
-                self.user_manager.set_session_realname(data["realname"])
-        else:
-            error = True
-            msg = _("Name is too short.")
-            return result, msg, error
+                # updating session
+                if "language" in profile_data_to_be_updated:
+                    self.user_manager.set_session_language(profile_data_to_be_updated["language"])
+                if "code_indentation" in profile_data_to_be_updated:
+                    self.user_manager.set_session_code_indentation(profile_data_to_be_updated["code_indentation"])
+                if "realname" in profile_data_to_be_updated:
+                    self.user_manager.set_session_realname(profile_data_to_be_updated["realname"])
 
         msg = _("Profile updated.")
 

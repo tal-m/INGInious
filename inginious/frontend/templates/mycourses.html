@@ -19,30 +19,27 @@
     <div class="alert alert-warning" role="alert">
         {{ _("This page lists all the courses you are currently enrolled in. You can find new courses on the course list page.") }}
     </div>
-    <div class="list-group mb-3">
-        <a class="list-group-item list-group-item-action list-group-item-info" href="{{ get_homepath() }}/courselist">
-            <i class="fa fa-fw fa-th-list"></i>
-            {{ _("Course list") }}
-        </a>
-    </div>
 
     <h3>{{ _("Last tried exercises") }}</h3>
     <div class="list-group">
         {% if submissions %}
             {% for submission in submissions %}
-                <a class="list-group-item list-group-item-action
-                    {% if submission['status'] == 'done' and submission['result'] == 'success' %}
-                        list-group-item-success
-                    {% elif submission['status'] == 'done' and submission['result'] == 'save' %}
-                        list-group-item-info
-                    {% elif submission['status'] == 'waiting' %}
-                        list-group-item-warning
-                    {% else %}
-                        list-group-item-danger
-                    {% endif %}"
-                    href="{{ get_homepath() }}/course/{{submission['courseid']}}/{{submission['taskid']}}">
-                    <b>{{ submission["task"].get_course().get_name(user_manager.session_language()) }}</b>: {{ submission["task"].get_name(user_manager.session_language()) }}
-                </a>
+                {% if submission['courseid'] in open_courses %}
+                    {% set course = open_courses[submission['courseid']] %}
+                    <a class="list-group-item list-group-item-action
+                        {% if submission['status'] == 'done' and submission['result'] == 'success' %}
+                            list-group-item-success
+                        {% elif submission['status'] == 'done' and submission['result'] == 'save' %}
+                            list-group-item-info
+                        {% elif submission['status'] == 'waiting' %}
+                            list-group-item-warning
+                        {% else %}
+                            list-group-item-danger
+                        {% endif %}"
+                        href="{{ get_path('course', submission['courseid'], submission['taskid']) }}">
+                        <b>{{ course.get_name(user_manager.session_language()) }}</b>: {{ submission["task"].get_name(user_manager.session_language()) }}
+                    </a>
+                {% endif %}
             {% endfor %}
         {% else %}
             <a class="list-group-item list-group-item-action disabled submission-empty">{{ _("No submissions") }}</a>
@@ -57,7 +54,7 @@
 	{%if open_courses %}
         {% set username = user_manager.session_username() %}
         {% for courseid, course in open_courses.items() %}
-            <a href="{{ get_homepath() }}/course/{{ courseid }}" class="list-group-item list-group-item-action
+            <a href="{{ get_path('course', courseid) }}" class="list-group-item list-group-item-action
                 {% if course.is_lti() %}
                     list-group-item-info
                 {% elif not course.is_open_to_non_staff() %}

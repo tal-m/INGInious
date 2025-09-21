@@ -16,19 +16,19 @@
 {% block navbar %}
     <nav aria-label="breadcrumb">
         <ol class="breadcrumb">
-            <li class="breadcrumb-item"><a href="{{get_homepath()}}/course/{{course.get_id()}}">{{ course.get_name(user_manager.session_language()) }}</a></li>
+            <li class="breadcrumb-item"><a href="{{get_path('course', course.get_id())}}">{{ course.get_name(user_manager.session_language()) }}</a></li>
             <li class="breadcrumb-item">
-                <a href="{{get_homepath()}}/admin/{{course.get_id()}}" title="{{ _('Administration') }}" data-toggle="tooltip" data-placement="bottom">
+                <a href="{{get_path('admin', course.get_id())}}" title="{{ _('Administration') }}" data-toggle="tooltip" data-placement="bottom">
                     <i class="fa fa-user-secret"></i>
                 </a>
             </li>
             <li class="breadcrumb-item">
-                <a href="{{get_homepath()}}/admin/{{course.get_id()}}/students" title="{{ _('Students') }}" data-toggle="tooltip" data-placement="bottom">
+                <a href="{{get_path('admin', course.get_id(), 'students')}}" title="{{ _('Students') }}" data-toggle="tooltip" data-placement="bottom">
                     <i class="fa fa-user"></i>
                 </a>
             </li>
-            <li class="breadcrumb-item"><a href="{{get_homepath()}}/admin/{{course.get_id()}}/student/{{username}}">{{user_realname}}</a></li>
-            <li class="breadcrumb-item"><a href="{{get_homepath()}}/admin/{{course.get_id()}}/submissions?users={{username}}&tasks={{task.get_id()}}">{{ task.get_name(user_manager.session_language()) }}</a></li>
+            <li class="breadcrumb-item"><a href="{{get_path('admin', course.get_id(), 'student', username)}}">{{user_realname}}</a></li>
+            <li class="breadcrumb-item"><a href="{{get_path('admin', course.get_id(), 'submissions?users=' + username + '&tasks' + task.get_id())}}">{{ task.get_name(user_manager.session_language()) }}</a></li>
             <li class="breadcrumb-item active"><a href="#">{{ submission['_id'] | string }}<span class="sr-only">{{ _("(current)") }}</span></a></li>
         </ol>
     </nav>
@@ -38,7 +38,7 @@
 
 {% set is_admin = user_manager.has_admin_rights_on_course(course) %}
 {% set course_tags = course.get_tags() %}
-{% set task_categories = task.get_categories() %}
+{% set submission_tags = submission.get("tests", {}) %}
 
 <h2>{{ _("Submission {}").format(str(submission['_id'])[0:10])}} - "{{ task.get_name(user_manager.session_language()) }}" - {{ user_realname }} ({{username}})</h2>
 <div class="alert alert-info text-center">
@@ -52,7 +52,7 @@
             </div>
             {% if "result"  in submission %}
                 <div class="col-md-12" style="margin:2px 0px 2px 0px;">
-                    <a href="{{ get_homepath() }}/admin/{{ course.get_id() }}/submissions?download_submission={{ submission['_id'] }}" class="btn btn-sm btn-block btn-primary">
+                    <a href="{{ get_path('admin', course.get_id(), 'submissions?download_submission=' + str(submission['_id']) ) }}" class="btn btn-sm btn-block btn-primary">
                         <i class="fa fa-download fa-fw"></i> {{ _("Download full submission") }}
                     </a>
                 </div>
@@ -86,18 +86,18 @@
 
 <!-- Tags -->
 {% set ns = namespace(visible_tags=[]) %}
-{% for category in task_categories %}
-    {% if course_tags[category].is_visible_for_student() or user_manager.has_staff_rights_on_course(course) %}
-        {% set ns.visible_tags = ns.visible_tags + [course_tags[category]] %}
+{% for tagid in submission_tags %}
+    {% if tagid in course_tags and (course_tags[tagid].is_visible_for_student() or user_manager.has_admin_rights_on_course(course)) %}
+        {% set ns.visible_tags = ns.visible_tags + [course_tags[tagid]] %}
     {% endif %}
 {% endfor %}
 
 {# Auto tags may appear for admins. So we force the h3 title even if there is not predefined tags #}
 {# We do not show the tag header for students if they can not get tags #}
-{% if visible_tags|length > 0 %}
+{% if ns.visible_tags|length > 0 %}
     <h3>{{ _("Tags") }}</h3>
     <div class="mb-3" id="main_tag_group">
-    {% for tag in visible_tags %}
+    {% for tag in ns.visible_tags %}
         {% if tag.get_type() == 0 %}
             <span class="badge alert-info" id="{{tag.get_id()}}" data-placement="right" data-toggle="tooltip" title="{{ tag.get_description(user_manager.session_language())}}">{{ tag.get_name(user_manager.session_language()) }}</span>
         {% elif tag.get_type() == 1 %}
@@ -109,7 +109,7 @@
 <!-- End Tags -->
 
 
-<form id="task" method="post" action="{{get_homepath()}}/course/{{course.get_id()}}/{{task.get_id()}}">
+<form id="task" method="post" action="{{get_path('course', course.get_id(), task.get_id())}}">
 
 <div id="task_alert"></div>
 
@@ -123,7 +123,7 @@
     <div class="card mb-3 problem">
         <div class="card-header">
             Question {{key}}: {{problem["name"]}}
-            <a href="{{get_homepath()}}/course/{{course.get_id()}}/{{task.get_id()}}?submissionid={{submission['_id']}}&questionid={{problem['id']}}" class="pull-right" title="_('Download as file') }}"
+            <a href="{{get_path('course', course.get_id(), task.get_id() + '?submissionid=' + str(submission['_id']) + '&questionid=' + problem['id'])}}" class="pull-right" title="_('Download as file') }}"
                data-toggle="tooltip" data-placement="bottom">
                 <i class="fa fa-download"></i>
             </a>

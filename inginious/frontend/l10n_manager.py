@@ -8,14 +8,14 @@ import flask
 
 class L10nManager:
 
-    def __init__(self):
+    def __init__(self, user_manager):
         self.translations = {}
-        self._session = flask.session
+        self._user_manager = user_manager
 
     def get_translation_obj(self, lang=None):
         if lang is None:
-            lang = self._session.get("language", "") if flask.has_app_context() else ""
+            lang = self._user_manager.session_language(default="") if flask.has_app_context() else ""
         return self.translations.get(lang, gettext.NullTranslations())
 
-    def gettext(self, *args, **kwargs):
-        return self.get_translation_obj().gettext(*args, **kwargs)
+    def gettext(self, text):
+        return self.get_translation_obj().gettext(text) if text else ""

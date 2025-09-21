@@ -2,6 +2,7 @@
 {# more information about the licensing of this file. #}
 
 {% set registered = user_manager.course_is_user_registered(course) %}
+{% set task_dispenser = course.get_task_dispenser() %}
 
 <div id="section_{{ list_id }}" class="section tasks_list card mb-4">
     <div class="section_header card-header d-flex justify-content-between pr-3" onclick="dropdown(this)">
@@ -23,18 +24,19 @@
             {% if taskid in tasks_data %}
                 {% set succeeded = tasks_data[taskid]["succeeded"] %}
                 {% set completion = tasks_data[taskid]["grade"] %}
-                <a href="{{ get_homepath() }}/course/{{course.get_id()}}/{{taskid}}" class="list-group-item list-group-item-action
-                    {% if not task.get_accessible_time().is_open() %} disabled {% endif %}">
+                <a href="{{ get_path('course', course.get_id(), taskid) }}" class="list-group-item list-group-item-action
+                    {% if not accessibilities[user_manager.session_username()][taskid].is_open() %} disabled {% endif %}" style="pointer-events: auto;">
                     <div class="row">
                         <div class="col-xs-12 col-md-7 pl-1">
                             <i style="color: {% if succeeded %}#468847{% else %}transparent{% endif %};" class="fa fa-check"></i>
                             {{ task.get_name(user_manager.session_language()) }}
-                            {% if not task.get_accessible_time().is_open() %}
+                            {% if not accessibilities[user_manager.session_username()][taskid].is_open() %}
                                 - <b> {{ _("deadline reached") }} </b>
                             {% endif %}
                         </div>
                         <div class="col-xs-12 col-md-5">
                             {% if registered %}
+                                <div type="button" class="fa fa-info" style="float: left; margin-top: 2px; margin-right: 5px;" data-toggle="tooltip" data-placement="bottom" title='{{_("Weight : ")}}{{course.get_task_dispenser().get_weight(taskid)}}'></div>
                                 <div class="progress">
                                     <div class="progress-bar bg-success" aria-valuenow="{{ completion | int }}" aria-valuemin="0" aria-valuemax="100" style="width: {{ completion | int }}%">
                                         {% if completion.is_integer() %}{{ completion | int }}{% else %}{{ completion }}{% endif %} %
@@ -45,11 +47,8 @@
                         </div>
                     </div>
                     <div id="tags_of_task" style="display:none;">
-                        {% for category in task.get_categories() %}
-                            {% set tag = tag_list[category] %}
-                            {% if tag.is_visible_for_student() or user_manager.has_staff_rights_on_course(course) %}
-                                <div id="tag" data-tag-name="{{tag.get_id()}}"></div>
-                            {% endif %}
+                        {% for tag in course.get_task_dispenser().get_categories(task.get_id()) %}
+                            <div id="tag" data-tag-name="{{ tag }}"></div>
                         {% endfor %}
                     </div>
                 </a>

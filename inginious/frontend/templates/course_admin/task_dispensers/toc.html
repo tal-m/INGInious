@@ -3,7 +3,7 @@
 
 {% include "course_admin/task_dispensers/util.html" %}
 
-<div id="course_structure" data-level="2" class="sections_list pb-3">
+<div id="course_structure" data-level="2" class="sections_list pb-3 mb-3">
     <div class="content">
         {% with sections=course_structure,level=3,display_subsections=True,config_fields=config_fields %}
            {% include "course_admin/task_dispensers/section.html" %}
@@ -23,3 +23,7 @@
 {% with id="empty_section", title=_("New section"), config={}, level=0, hidden=True, display_subsections=True %}
    {% include "course_admin/task_dispensers/empty_section.html" %}
 {% endwith %}
+
+<script>
+    dispenser_config = JSON.parse('{{ dispenser_config | tojson }}');
+</script>

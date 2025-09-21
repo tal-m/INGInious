@@ -12,9 +12,9 @@ INGInious supports **most** of it. See below for some basic examples.
 Example
 ```````
 
-.. image:: https://raw.githubusercontent.com/UCL-INGI/INGInious/master/inginious/frontend/static/images/header.png
+.. image:: https://raw.githubusercontent.com/INGInious/INGInious/master/inginious/frontend/static/images/header.png
 
-`A link to the image <https://raw.githubusercontent.com/UCL-INGI/INGInious/master/inginious/frontend/static/images/header.png>`_
+`A link to the image <https://raw.githubusercontent.com/INGInious/INGInious/master/inginious/frontend/static/images/header.png>`_
 
 Math block:
 
@@ -47,9 +47,9 @@ Code
     Example
     ```````
 
-    .. image:: https://raw.githubusercontent.com/UCL-INGI/INGInious/master/inginious/frontend/static/images/header.png
+    .. image:: https://raw.githubusercontent.com/INGInious/INGInious/master/inginious/frontend/static/images/header.png
 
-    `A link to the image <https://raw.githubusercontent.com/UCL-INGI/INGInious/master/inginious/frontend/static/images/header.png>`_
+    `A link to the image <https://raw.githubusercontent.com/INGInious/INGInious/master/inginious/frontend/static/images/header.png>`_
 
     Math block:
 

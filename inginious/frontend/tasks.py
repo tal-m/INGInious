@@ -108,23 +108,8 @@ class Task(object):
         else:
             self._contact_url = ""
 
-        # Submission storage
-        self._stored_submissions = int(self._data.get("stored_submissions", 0))
-
-        # Default download
-        self._evaluate = self._data.get("evaluate", "best")
-
-        # Grade weight
-        self._weight = float(self._data.get("weight", 1.0))
-
         # _accessible
         self._accessible = AccessibleTime(self._data.get("accessible", None))
-
-        # Group task
-        self._groups = bool(self._data.get("groups", False))
-
-        # Submission limits
-        self._submission_limit = self._data.get("submission_limit", {"amount": -1, "period": -1})
         
         # Input random
         self._input_random = int(self._data.get("input_random", 0))
@@ -132,14 +117,11 @@ class Task(object):
         # Regenerate input random
         self._regenerate_input_random = bool(self._data.get("regenerate_input_random", False))
 
-        # Category tags
-        self._categories = self._data.get("categories", [])
-
     def get_translation_obj(self, language):
         return self._translations.get(language, gettext.NullTranslations())
 
-    def gettext(self, language, *args, **kwargs):
-        return self.get_translation_obj(language).gettext(*args, **kwargs)
+    def gettext(self, language, text):
+        return self.get_translation_obj(language).gettext(text) if text else ""
 
     def input_is_consistent(self, task_input, default_allowed_extension, default_max_size):
         """ Check if an input for a task is consistent. Return true if this is case, false else """
@@ -206,33 +188,6 @@ class Task(object):
 
         return task_problem_types.get(problem_content.get('type', ""))(problemid, problem_content, self._translations, self._task_fs)
 
-    def get_grading_weight(self):
-        """ Get the relative weight of this task in the grading """
-        return self._weight
-
-    def get_accessible_time(self, plugin_override=True):
-        """  Get the accessible time of this task """
-        vals = self._plugin_manager.call_hook('task_accessibility', course=self.get_course(), task=self, default=self._accessible)
-        return vals[0] if len(vals) and plugin_override else self._accessible
-
-    def get_deadline(self):
-        """ Returns a string containing the deadline for this task """
-        if self.get_accessible_time().is_always_accessible():
-            return _("No deadline")
-        elif self.get_accessible_time().is_never_accessible():
-            return _("It's too late")
-        else:
-            # Prefer to show the soft deadline rather than the hard one
-            return self.get_accessible_time().get_soft_end_date().strftime("%d/%m/%Y %H:%M:%S")
-
-    def is_group_task(self):
-        """ Indicates if the task submission mode is per groups """
-        return self._groups
-
-    def get_submission_limit(self):
-        """ Returns the submission limits et for the task"""
-        return self._submission_limit
-
     def get_name(self, language):
         """ Returns the name of this task """
         return self.gettext(language, self._name) if self._name else ""
@@ -257,18 +212,6 @@ class Task(object):
         for problem in self._problems:
             input_data = problem.adapt_input_for_backend(input_data)
         return input_data
-
-    def get_stored_submissions(self):
-        """ Indicates if only the last submission must be stored for the task """
-        return self._stored_submissions
-
-    def get_evaluate(self):
-        """ Indicates the default download for the task """
-        return self._evaluate
-
-    def get_categories(self):
-        """ Returns the tags id associated to the task """
-        return [category for category in self._categories if category in self._course.get_tags()]
         
     def get_number_input_random(self):
         """ Return the number of random inputs """
@@ -277,3 +220,8 @@ class Task(object):
     def regenerate_input_random(self):
         """ Indicates if random inputs should be regenerated """
         return self._regenerate_input_random
+
+    def get_dispenser_settings(self, fields):
+        """ Fetch the legacy config fields now used by task dispensers """
+        return {field_class.get_id(): self._data[field] for field, field_class in fields.items()
+                if field in self._data and field_class.get_value({field_class.get_id(): self._data[field]})}

@@ -32,7 +32,7 @@
                         {% else %}
                             list-group-item-danger
                         {% endif %}"
-                        href="{{ get_homepath() }}/course/{{submission['courseid']}}/{{submission['taskid']}}">
+                        href="{{ get_path('course', submission['courseid'], submission['taskid']) }}">
                         {{ submission['taskname'] }}
                     </a>
                 {% endfor %}
@@ -48,13 +48,13 @@
             </div>
         {% endif %}
         <div class="list-group">
-            <a class="list-group-item list-group-item-action list-group-item-info" href="{{ get_homepath() }}/admin/{{ course.get_id() }}">
+            <a class="list-group-item list-group-item-action list-group-item-info" href="{{ get_path('admin', course.get_id()) }}">
                 <i class="fa fa-user-secret fa-fw"></i>&nbsp; {{ _("Course administration") }}
             </a>
         </div>
     {% elif registered %}
         <div class="list-group">
-            <a class="list-group-item list-group-item-action list-group-item-info" href="{{ get_homepath() }}/group/{{ course.get_id() }}">
+            <a class="list-group-item list-group-item-action list-group-item-info" href="{{ get_path('group', course.get_id()) }}">
                 <i class="fa fa-group fa-fw"></i>&nbsp;
                 {% set mygroup = user_manager.get_course_user_group(course) %}
                 {% if mygroup and user_manager.session_username() in mygroup['students'] %}
@@ -78,7 +78,7 @@
             {{ _("Please enroll in the course to be able to submit answers to problems.") }}
         </div>
         <div class="list-group">
-            <a href="{{ get_homepath() }}/register/{{ course.get_id() }}" class="list-group-item list-group-item-action list-group-item-info">
+            <a href="{{ get_path('register', course.get_id()) }}" class="list-group-item list-group-item-action list-group-item-info">
                 <i class="fa fa-sign-in fa-fw"></i>&nbsp; {{ _("Enroll in the course") }}
             </a>
         </div>
@@ -89,9 +89,9 @@
     <nav aria-label="breadcrumb">
         <ol class="breadcrumb">
             {% if registered %}
-                <li class="breadcrumb-item"><a href="{{ get_homepath() }}/mycourses" title="{{ _('My courses') }}" data-toggle="tooltip" data-placement="bottom"><i class="fa fa-th-list"></i></a></li>
+                <li class="breadcrumb-item"><a href="{{ get_path('mycourses') }}" title="{{ _('My courses') }}" data-toggle="tooltip" data-placement="bottom"><i class="fa fa-th-list"></i></a></li>
             {% else %}
-                <li class="breadcrumb-item"><a href="{{get_homepath() }}/courselist" title="{{ _('Course list') }}" data-toggle="tooltip" data-placement="bottom"><i class="fa fa-th-list"></i></a></li>
+                <li class="breadcrumb-item"><a href="{{ get_path('courselist') }}" title="{{ _('Course list') }}" data-toggle="tooltip" data-placement="bottom"><i class="fa fa-th-list"></i></a></li>
             {% endif %}
             <li class="breadcrumb-item active"><a href="#">{{ course.get_name(user_manager.session_language()) }} <span class="sr-only">{{ _("(current)") }}</span></a></li>
         </ol>
@@ -104,14 +104,12 @@
         <h2>{{ course.get_name(user_manager.session_language()) }}</h2>
     </div>
 
-    {%if tag_filter_list %}
+    {%if category_filter_list %}
         <div class="col-md-4  p-3">
             <select class="form-control input-sm" style="height: 22px; padding: 2px 5px; font-size: 12px; line-height: 1.5;" id="tag_filter" onchange="filter_tag(this)">
-                <option value=""> {{ _("Filter tasks by tags") }}</option>
-                {% for key, tag in tag_filter_list.items() %}
-                    {% if tag.get_type() in [0, 2] and tag.is_visible_for_student() %}
-                        <option value="{{ tag.get_id() }}">{{ tag.get_name(user_manager.session_language()) }}</option>
-                    {% endif %}
+                <option value=""> {{ _("Filter tasks by category") }}</option>
+                {% for category in category_filter_list %}
+                    <option value="{{ category }}">{{ category }}</option>
                 {% endfor %}
             </select>
         </div>
@@ -175,7 +173,7 @@ function filter_tag(tag) {
     }
 </style>
 
-{{ course.get_task_dispenser().render(template_helper, course, tasks_data, tag_filter_list) | safe }}
+{{ course.get_task_dispenser().render(template_helper, course, tasks_data, category_filter_list,user_manager.session_username()) | safe }}
 
 {% include "unregister_modal.html" %}
 

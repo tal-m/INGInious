@@ -174,7 +174,7 @@ The different entries are :
         Number of values to trust for X-Forwarded-Host. Its default value is 1
 
 
-.. _configuration.example.yaml: https://github.com/UCL-INGI/INGInious/blob/master/configuration.example.yaml
+.. _configuration.example.yaml: https://github.com/INGInious/INGInious/blob/master/configuration.example.yaml
 .. _docker-py API: https://github.com/docker/docker-py/blob/master/docs/api.md#client-api
 
 .. _plugins:
@@ -301,29 +301,6 @@ To enable this plugin, add to your configuration file:
 created app. Replace ``facebook_auth`` by ``linkedin_auth``, ``github_auth`` or ``google_auth`` according to your case.
 
 Set ``debug`` to ``true`` to allow OAuth to be run in debug mode (for instance, if SSL is not yet set up).
-
-Twitter
-!!!!!!!
-
-Uses a Twitter application to allow authentication and sharing via the network.
-You need to create two apps on the appropriate developer platform in order to use this plugin. One will only have
-authentication capabilities and the other one will be able to write posts for the user in order to share results.
-
-To enable this plugin, add to your configuration file:
-::
-
-    plugins:
-        - plugin_module: inginious.frontend.plugins.auth.twitter_auth
-          id: twitter
-          debug: false
-          client_id: <app_id_auth_only>
-          client_secret: <app_secret_auth_only>
-          share_client_id: <app_id_with_share_rights>
-          share_client_secret: <app_secret_with_share_rights>
-          user: <user_who_created_the_app>
-
-``id`` is the authentication method id. ``client_id`` and ``client_secret`` are the OAuth identifier and secret of the
-created app. Set ``debug`` to ``true`` to allow OAuth to be run in debug mode (for instance, if SSL is not yet set up).
 
 Scoreboard plugin
 `````````````````

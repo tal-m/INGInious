@@ -1,0 +1,17 @@
+{
+  "name": "inginious-minify",
+  "version": "1.0.0",
+  "description": "Minify the JS files used in the various frontends",
+  "main": "Gruntfile.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Guillaume Derval",
+  "license": "AGPL 1.0",
+  "devDependencies": {
+    "grunt": "^1.3.0",
+    "grunt-contrib-compress": "^1.6.0",
+    "grunt-contrib-concat": "^1.0.1",
+    "grunt-contrib-uglify": "^5.2.2"
+  }
+}

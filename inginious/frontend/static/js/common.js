@@ -10,7 +10,7 @@ function init_common()
     colorizeStaticCode();
     $('.code-editor').each(function(index, elem)
     {
-        registerCodeEditor(elem, $(elem).attr('data-x-language'), $(elem).attr('data-x-lines'));
+        registerCodeEditor(elem, $(elem).attr('data-x-language'), $(elem).attr('data-x-lines'), $(elem).attr('data-x-first-line'));
     });
 
     //Fix a bug with codemirror and bootstrap tabs
@@ -69,7 +69,7 @@ function colorizeStaticCode()
 }
 
 //Register and init a code editor (ace)
-function registerCodeEditor(textarea, lang, lines)
+function registerCodeEditor(textarea, lang, lines, firstline=1)
 {
     var mode = CodeMirror.findModeByName(lang);
     if(mode == undefined)
@@ -77,8 +77,25 @@ function registerCodeEditor(textarea, lang, lines)
 
     var is_single = $(textarea).hasClass('single');
 
+     var keyMappings = {
+        'Ctrl-Enter': function() {
+                                 $('body,html').animate({
+                                   scrollTop: $('#task-submit').offset().top
+                                 }, 'fast');
+                               }
+     }
+
+    if (user_indentation_type["text"] == "tabs") {
+        keyMappings["Tab"] = function(cm) { cm.execCommand("insertTab"); cm.execCommand("indentLess"); cm.execCommand("insertTab"); };
+    } else {
+        keyMappings["Tab"] = function(cm) { cm.execCommand("insertSoftTab");};
+    }
+
+
+
     var editor = CodeMirror.fromTextArea(textarea, {
         lineNumbers:       true,
+        firstLineNumber:   parseInt(firstline),
         mode:              mode["mime"],
         foldGutter:        true,
         styleActiveLine:   true,
@@ -86,19 +103,15 @@ function registerCodeEditor(textarea, lang, lines)
         autoCloseBrackets: true,
         lineWrapping:      true,
         gutters:           ["CodeMirror-linenumbers", "CodeMirror-foldgutter"],
-        indentUnit:        4,
+        indentUnit:        user_indentation_type["indent"],
+        indentWithTabs:    user_indentation_type["indentWithTabs"],
+        tabSize:           user_indentation_type["indent"],
         viewportMargin:    Infinity,
         lint:              function()
                            {
                                return []
                            },
-        extraKeys:         {
-                               'Ctrl-Enter': function() {
-                                 $('body,html').animate({
-                                   scrollTop: $('#task-submit').offset().top
-                                 }, 'fast');
-                               },
-                           },
+        extraKeys:         keyMappings
     });
 
     if(is_single)

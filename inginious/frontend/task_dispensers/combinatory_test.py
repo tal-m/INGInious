@@ -1,17 +1,19 @@
-import json
+# -*- coding: utf-8 -*-
+#
+# This file is part of INGInious. See the LICENSE and the COPYRIGHTS files for
+# more information about the licensing of this file.
 
-from collections import OrderedDict
 from random import Random
-from inginious.frontend.task_dispensers import TaskDispenser
-from inginious.frontend.task_dispensers.util import SectionsList, check_toc, SectionConfigItem
+from inginious.frontend.task_dispensers.toc import TableOfContents
+from inginious.frontend.task_dispensers.util import SectionConfigItem, Weight, SubmissionStorage, EvaluationMode, \
+    Categories, SubmissionLimit, Accessibility
+from inginious.frontend.accessible_time import AccessibleTime
 
 
-class CombinatoryTest(TaskDispenser):
-
-    def __init__(self, task_list_func, dispenser_data, database, course_id):
-        self._task_list_func = task_list_func
-        self._data = SectionsList(dispenser_data)
-
+class CombinatoryTest(TableOfContents):
+    config_items = [Weight, SubmissionStorage, EvaluationMode, Categories, SubmissionLimit, Accessibility]
+    legacy_fields = {"weight": Weight, "submission_limit": SubmissionLimit, "stored_submissions": SubmissionStorage,
+                     "evaluate": EvaluationMode, "accessible": Accessibility, "categories": Categories}
     @classmethod
     def get_id(cls):
         return "combinatory_test"
@@ -20,57 +22,51 @@ class CombinatoryTest(TaskDispenser):
     def get_name(cls, language):
         return _("Combinatory test")
 
-    def get_dispenser_data(self):
-        return ""
+    def get_group_submission(self, taskid):
+        return False
 
-    def render_edit(self, template_helper, course, task_data):
+    def get_accessibilities(self, taskids, usernames):
+        result = {username: {taskid: AccessibleTime(False) for taskid in taskids} for username in usernames}
+        for index, section in enumerate(self._toc):
+            task_list = [taskid for taskid in section.get_tasks()
+                         if Accessibility.get_value(self._task_config.get(taskid, {})).after_start()]
+            amount_questions = int(section.get_config().get("amount", 0))
+            for username in usernames:
+                rand = Random("{}#{}#{}".format(username, index, section.get_title()))
+                random_order_choices = task_list.copy()
+                rand.shuffle(random_order_choices)
+                for taskid in random_order_choices[0:amount_questions]:
+                    result[username][taskid] = Accessibility.get_value(self._task_config.get(taskid, {}))
+
+        return result
+
+    def render_edit(self, template_helper, course, task_data, task_errors):
         """ Returns the formatted task list edition form """
         config_fields = {
             "amount": SectionConfigItem(_("Amount of tasks to be displayed"), "number", 0)
         }
         return template_helper.render("course_admin/task_dispensers/combinatory_test.html", course=course,
-                                      course_structure=self._data, tasks=task_data, config_fields=config_fields)
+                                      course_structure=self._toc, tasks=task_data, task_errors=task_errors, config_fields=config_fields,
+                                      dispenser_config=self._task_config)
 
-    def render(self, template_helper, course, tasks_data, tag_list):
+    def render(self, template_helper, course, tasks_data, tag_list, username):
         """ Returns the formatted task list"""
+        accessibilities = course.get_task_dispenser().get_accessibilities(self._task_list_func(), [username])
         return template_helper.render("task_dispensers/toc.html", course=course, tasks=self._task_list_func(),
-                                      tasks_data=tasks_data, tag_filter_list=tag_list, sections=self._data)
+                                      tasks_data=tasks_data, tag_filter_list=tag_list, sections=self._toc,
+                                      accessibilities=accessibilities)
 
-    @classmethod
-    def check_dispenser_data(cls, dispenser_data):
+    def check_dispenser_data(self, dispenser_data):
         """ Checks the dispenser data as formatted by the form from render_edit function """
-        new_toc = json.loads(dispenser_data)
-        for section in new_toc:
-            config = section.setdefault("config", {})
-            config["amount"] = int(config.get("amount", 0))
-        valid, errors = check_toc(new_toc)
-        return new_toc if valid else None, errors
+        new_toc, errors = TableOfContents.check_dispenser_data(self, dispenser_data)
+        if not new_toc:
+            return None, errors
 
-    def get_user_task_list(self, usernames):
-        """ Returns a dictionary with username as key and the user task list as value """
-        tasks = self._task_list_func()
-        result = {username: [] for username in usernames}
-        for section in self._data:
-            task_list = section.get_tasks()
-            task_list = [taskid for taskid in task_list if
-                         taskid in tasks and tasks[taskid].get_accessible_time().after_start()]
-            amount_questions = int(section.get_config().get("amount", 0))
-            for username in usernames:
-                rand = Random("{}#{}#{}".format(username, section.get_id(), section.get_title()))
-                random_order_choices = list(task_list)
-                rand.shuffle(random_order_choices)
-                result[username] += random_order_choices[0:amount_questions]
-        return result
+        try:
+            for section in new_toc.get("toc", {}):
+                config = section.setdefault("config", {})
+                config["amount"] = int(config.get("amount", 0))
+        except Exception as ex:
+            return None, str(ex)
 
-    def get_ordered_tasks(self):
-        """ Returns a serialized version of the tasks structure as an OrderedDict"""
-        tasks = self._task_list_func()
-        return OrderedDict([(taskid, tasks[taskid]) for taskid in self._data.get_tasks() if taskid in tasks])
-
-    def get_task_order(self, taskid):
-        """ Get the position of this task in the course """
-        tasks_id = self._data.get_tasks()
-        if taskid in tasks_id:
-            return tasks_id.index(taskid)
-        else:
-            return len(tasks_id)
+        return new_toc, errors

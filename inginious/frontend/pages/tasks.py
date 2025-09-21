@@ -60,7 +60,7 @@ class BaseTaskPage(object):
             self.user_manager.course_register_user(course, force=True)
 
         if not self.user_manager.course_is_open_to_user(course, username, is_LTI):
-            return handle_course_unavailable(self.cp.app.get_homepath(), self.template_helper, self.user_manager, course)
+            return handle_course_unavailable(self.cp.app.get_path, self.template_helper, self.user_manager, course)
 
         is_staff = self.user_manager.has_staff_rights_on_course(course, username)
 
@@ -71,15 +71,18 @@ class BaseTaskPage(object):
         except TaskNotFoundException:
             raise NotFound()
 
-        user_task_list = course.get_task_dispenser().get_user_task_list([username])[username]
+        task_dispenser = course.get_task_dispenser()
+        user_task_list = task_dispenser.get_user_task_list([username])[username]
+        ordered_task_list = [taskid for taskid in task_dispenser.get_ordered_tasks() if taskid in user_task_list]
+
         if taskid not in user_task_list:
             previous_taskid = None
             next_taskid = None
         else:
             # Compute previous and next taskid
-            index = user_task_list.index(taskid)
-            previous_taskid = user_task_list[index - 1] if index > 0 else None
-            next_taskid = user_task_list[index + 1] if index < len(user_task_list) - 1 else None
+            index = ordered_task_list.index(taskid)
+            previous_taskid = ordered_task_list[index - 1] if index > 0 else None
+            next_taskid = ordered_task_list[index + 1] if index < len(ordered_task_list) - 1 else None
 
         self.user_manager.user_saw_task(username, courseid, taskid)
 
@@ -95,14 +98,23 @@ class BaseTaskPage(object):
             if userinput["questionid"] not in sinput:
                 raise NotFound()
 
-            if isinstance(sinput[userinput["questionid"]], dict):
-                # File uploaded previously
+            file_data = sinput[userinput["questionid"]]
+            if isinstance(file_data, dict):
+                filename = file_data['filename']
+                file_content = file_data['value']
                 mimetypes.init()
-                mime_type = mimetypes.guess_type(urllib.request.pathname2url(sinput[userinput["questionid"]]['filename']))
-                return Response(response=sinput[userinput["questionid"]]['value'], content_type=mime_type[0])
+                mime_type = mimetypes.guess_type(urllib.request.pathname2url(filename))
+                
+                # Force download for non pdf files
+                if not filename.lower().endswith(".pdf"):
+                    headers = {
+                        'Content-Disposition': f'attachment; filename="{filename}"'
+                    }
+                    return Response(response=file_content, content_type=mime_type[0], headers=headers)
+                
+                return Response(response=file_content, content_type=mime_type[0])
             else:
-                # Other file, download it as text
-                return Response(response=sinput[userinput["questionid"]], content_type='text/plain')
+                return Response(response=file_data, content_type='text/plain')
         else:
             # Generate random inputs and save it into db
             random.seed(str(username if username is not None else "") + taskid + courseid + str(
@@ -125,7 +137,7 @@ class BaseTaskPage(object):
             eval_submission = self.database.submissions.find_one({'_id': ObjectId(submissionid)}) if submissionid else None
 
             students = [self.user_manager.session_username()]
-            if task.is_group_task() and not self.user_manager.has_admin_rights_on_course(course, username):
+            if course.get_task_dispenser().get_group_submission(taskid) and not self.user_manager.has_admin_rights_on_course(course, username):
                 group = self.database.groups.find_one({"courseid": task.get_course_id(),
                                                      "students": self.user_manager.session_username()})
                 if group is not None:
@@ -137,9 +149,8 @@ class BaseTaskPage(object):
 
             # Visible tags
             course_tags = course.get_tags()
-            task_categories = task.get_categories()
-            visible_tags = [course_tags[category] for category in task_categories if
-                            course_tags[category].is_visible_for_student() or self.user_manager.has_staff_rights_on_course(course)]
+            visible_tags = [tags for _,tags in course_tags.items() if
+                tags.is_visible_for_student() or self.user_manager.has_staff_rights_on_course(course)]
 
             # Problem dict
             pdict = {problem.get_id(): problem.get_type() for problem in task.get_problems()}
@@ -159,7 +170,7 @@ class BaseTaskPage(object):
 
         course = self.course_factory.get_course(courseid)
         if not self.user_manager.course_is_open_to_user(course, username, isLTI):
-            return handle_course_unavailable(self.cp.app.get_homepath(), self.template_helper, self.user_manager, course)
+            return handle_course_unavailable(self.cp.app.get_path, self.template_helper, self.user_manager, course)
 
         is_staff = self.user_manager.has_staff_rights_on_course(course, username)
         is_admin = self.user_manager.has_admin_rights_on_course(course, username)
@@ -185,37 +196,35 @@ class BaseTaskPage(object):
                     return json.dumps({"status": "error", "title": _("Error"), "text": _("Your task has been regenerated. This current task is outdated.")})
 
             # Reparse user input with array for multiple choices and files
-            userinput = flask.request.form.copy()
+            task_input = {}
             for problem in task.get_problems():
                 pid = problem.get_id()
                 if problem.input_type() == list:
-                    userinput[pid] = flask.request.form.getlist(pid)
+                    task_input[pid] = flask.request.form.getlist(pid)
                 elif problem.input_type() == dict:
-                    userinput[pid] = flask.request.files.get(pid)
+                    task_input[pid] = flask.request.files.get(pid)
                 else:
-                    userinput[pid] = flask.request.form.get(pid)
+                    task_input[pid] = flask.request.form.get(pid)
 
-            userinput = task.adapt_input_for_backend(userinput)
+            task_input = task.adapt_input_for_backend(task_input)
 
-            if not task.input_is_consistent(userinput, self.default_allowed_file_extensions, self.default_max_file_size):
+            if not task.input_is_consistent(task_input, self.default_allowed_file_extensions, self.default_max_file_size):
                 return Response(content_type='application/json',
                                 response=json.dumps({
                                     "status": "error",  "title": _("Error"),
                                     "text": _("Please answer to all the questions and verify the extensions of the files "
                                               "you want to upload. Your responses were not tested.")
                                 }))
-            del userinput['@action']
 
             # Get debug info if the current user is an admin
             debug = is_admin
             if "@debug-mode" in userinput:
                 if userinput["@debug-mode"] == "ssh" and debug:
                     debug = "ssh"
-                del userinput['@debug-mode']
 
             # Start the submission
             try:
-                submissionid, oldsubids = self.submission_manager.add_job(task, userinput, debug)
+                submissionid, oldsubids = self.submission_manager.add_job(task, task_input, course.get_task_dispenser(), debug)
                 return Response(content_type='application/json', response=json.dumps({
                     "status": "ok", "submissionid": str(submissionid), "remove": oldsubids,
                     "text": _("<b>Your submission has been sent...</b>")
@@ -342,7 +351,7 @@ class BaseTaskPage(object):
             tojson["title"] = _("An internal error occurred. Please retry later. "
                                 "If the error persists, send an email to the course administrator.")
 
-        tojson["title"] += " " + _("[Submission #{submissionid}]").format(submissionid=data["_id"])
+        tojson["title"] += " " + _("[Submission #{submissionid} (<b>{submissionDate}</b>)]").format(submissionid=data["_id"], submissionDate=data["submitted_on"].strftime("%Y-%m-%d %H:%M:%S"))
         tojson["title"] = self.plugin_manager.call_hook_recursive("feedback_title", task=task, submission=data, title=tojson["title"])["title"]
         
         tojson["text"] = data.get("text", "")
@@ -400,7 +409,7 @@ class TaskPageStaticDownload(INGIniousPage):
         try:
             course = self.course_factory.get_course(courseid)
             if not self.user_manager.course_is_open_to_user(course):
-                return handle_course_unavailable(self.app.get_homepath(), self.template_helper, self.user_manager, course)
+                return handle_course_unavailable(self.cp.app.get_path, self.template_helper, self.user_manager, course)
 
             path_norm = posixpath.normpath(urllib.parse.unquote(path))
 

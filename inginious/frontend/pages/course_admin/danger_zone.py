@@ -193,7 +193,7 @@ class CourseDangerZonePage(INGIniousAdminPage):
             else:
                 try:
                     self.delete_course(courseid)
-                    return redirect(self.app.get_homepath() + '/index')
+                    return redirect(self.app.get_path("index"))
                 except Exception as ex:
                     msg = _("An error occurred while deleting the course data: {}").format(repr(ex))
                     error = True
@@ -217,7 +217,7 @@ class CourseDangerZonePage(INGIniousAdminPage):
 
     def page(self, course, msg="", error=False):
         """ Get all data and display the page """
-        thehash = UserManager.hash_password(str(random.getrandbits(256)))
+        thehash = UserManager.hash_password_sha512(str(random.getrandbits(256)))
         self.user_manager.set_session_token(thehash)
 
         backups = self.get_backup_list(course)

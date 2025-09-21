@@ -30,7 +30,7 @@ INGInious needs:
 .. _Python: https://www.python.org/
 .. _MongoDB: http://www.mongodb.org/
 
-RHEL/Cent OS 7+, Fedora 32+
+RHEL/Rocky/Alma Linux 8+, Fedora 34+
 `````````````````````````````
 
 .. DANGER::
@@ -44,30 +44,30 @@ The previously mentioned dependencies can be installed, for Cent OS 7+ :
     # yum install -y git gcc libtidy python3 python3-devel python3-pip zeromq-devel yum-utils
     # yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
     # yum install -y docker-ce docker-ce-cli
-    # cat <<EOF > /etc/yum.repos.d/mongodb-org-4.4.repo
-    [mongodb-org-4.4]
+    # cat <<EOF > /etc/yum.repos.d/mongodb-org-7.0.repo
+    [mongodb-org-7.0]
     name=MongoDB Repository
-    baseurl=https://repo.mongodb.org/yum/redhat/\$releasever/mongodb-org/4.4/x86_64/
+    baseurl=https://repo.mongodb.org/yum/redhat/9/mongodb-org/7.0/x86_64/
     gpgcheck=1
     enabled=1
-    gpgkey=https://www.mongodb.org/static/pgp/server-4.4.asc
+    gpgkey=https://pgp.mongodb.com/server-7.0.asc
     EOF
     # yum install -y mongodb-org mongodb-org-server
 
-Or, for Fedora 32+:
+Or, for Fedora 34+:
 
 .. code-block:: bash
 
-    # yum install -y git gcc libtidy python3 python3-devel python3-pip zeromq-devel dnf-plugins-core
+    # yum install -y git gcc libtidy python3 python3-devel python3-pip python3-venv zeromq-devel dnf-plugins-core
     # dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
     # dnf install -y docker-ce docker-ce-cli
-    # cat <<EOF > /etc/yum.repos.d/mongodb-org-4.4.repo
-    [mongodb-org-4.4]
+    # cat <<EOF > /etc/yum.repos.d/mongodb-org-7.0.repo
+    [mongodb-org-7.0]
     name=MongoDB Repository
-    baseurl=https://repo.mongodb.org/yum/redhat/8/mongodb-org/4.4/x86_64/
+    baseurl=https://repo.mongodb.org/yum/redhat/9/mongodb-org/7.0/x86_64/
     gpgcheck=1
     enabled=1
-    gpgkey=https://www.mongodb.org/static/pgp/server-4.4.asc
+    gpgkey=https://pgp.mongodb.com/server-7.0.asc
     EOF
     # yum install -y mongodb-org mongodb-org-server
 
@@ -81,29 +81,58 @@ You can now start and enable the ``mongod`` and ``docker`` services:
     # systemctl start docker
     # systemctl enable docker
     
-Ubuntu 18.04+
+Ubuntu 22.04+
 `````````````
 
-The previously mentioned dependencies can be installed, for Ubuntu 18.04+:
+
+The previously mentioned dependencies can be installed, for Ubuntu 22.04+:
+
+As previously said, INGInious needs some specific packages. Those can simply be add by running this command:
 
 .. code-block:: bash
 
-    # apt-get update
-    # apt-get install git gcc tidy python3 python3-pip python3-dev libzmq3-dev mongodb apt-transport-https curl gnupg lsb-release
-    # curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-    # echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
-    # apt-get update
-    # apt-get install docker-ce docker-ce-cli
+    sudo apt install git gcc tidy python3-pip python3-dev python3-venv libzmq3-dev apt-transport-https
 
-You may also add ``libxmlsec1-dev libltdl-dev`` for the SAML2 auth plugin
+For Docker and MongoDB, some specific steps are needed:
+
+First, Docker:
+
+.. code-block:: bash
+
+    sudo apt install curl gnupg lsb-release
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+    sudo apt update
+    sudo apt install docker-ce docker-ce-cli
+
+Then, Mongo:
+
+.. code-block:: bash
+
+    wget -qO - https://www.mongodb.org/static/pgp/server-6.0.asc | sudo apt-key add -
+    echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/6.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-6.0.list
+    sudo apt update
+    wget http://archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2_amd64.deb
+    sudo dpkg -i libssl1.1_1.1.1f-1ubuntu2_amd64.deb
+    sudo apt install -y mongodb-org
+
+.. NOTE::
+
+    Libssl installation is a temporary fix that is not required for all versions.
+    It may not work anymore (or may not be necessary) for future versions.
+
+You may also add ``libxmlsec1-dev libltdl-dev`` for the SAML2 auth plugin.
 
 You can now start and enable the ``mongod`` and ``docker`` services:
 ::
 
-    # systemctl start mongodb
-    # systemctl enable mongodb
+    # systemctl daemon-reload
+    # systemctl start mongod
+    # systemctl enable mongod
     # systemctl start docker
     # systemctl enable docker
+
+
 
 macOS
 `````
@@ -128,25 +157,56 @@ The next step is to install `Docker for Mac <https://docs.docker.com/docker-for-
 
 .. _Installpip:
 
+**Whatever the distribution, you should make docker available for non-root user:**
+
+1. Run the ``groupadd`` command below to create a new group called ``docker``. Enter your password to continue running the command.
+
+.. code-block:: bash
+
+    sudo groupadd docker
+
+If the ``docker`` group exists in the user group, you will get a message like "group already exists".
+
+2. Next, run the ``usermod`` command below where the ``-aG`` options tell the command to add the INGInious running user ``<user>`` to the ``docker`` group.
+This command causes your user account to have non-user access.
+
+.. code-block:: bash
+
+    sudo usermod -aG docker user
+
+3. Run the ``newgrp`` command below to change the current real group ID to the ``docker`` group.
+
+.. code-block:: bash
+
+    sudo newgrp docker
+
 Installing INGInious
 --------------------
 
-The recommended setup is to install INGInious via pip and the master branch of the INGInious git repository.
-This allows you to use the latest development version. This version is currently the supported one for issues.
+To keep a clean distribution, we recommend to work with a virtualenv:
+
+.. code-block:: bash
+
+    python3 -m venv /path/to/venv/INGInious
+    source /path/to/venv/INGInious/bin/activate
+
+The recommended setup is to install INGInious via pip from PyPI.
+This allows you to use the latest supported version.
 ::
 
-    $ pip3 install --upgrade git+https://github.com/UCL-INGI/INGInious.git@inginious-0.8
+    $ pip install --upgrade pip
+    $ pip install --upgrade inginious
 
 This will automatically upgrade an existing version.
 
 .. note::
 
-   You may want to enable the LDAP/SAML2 plugin or use FCGI/UWSGI instead of the web.py default webserver.
-   In this case, you have to install more packages: simply add ``[cgi]``, ``[uwsgi]``, ``[ldap]`` or ``[saml2]`` to the above command, depending on your needs:
+   You may want to enable the LDAP/SAML2 plugin.
+   In this case, you have to install more packages: simply add ``[ldap]`` or ``[saml2]`` to the above command, depending on your needs:
 
    ::
 
-       $ pip3 install --upgrade git+https://github.com/UCL-INGI/INGInious.git@inginious-0.8#egg=INGInious[cgi,ldap]
+       $ pip install --upgrade inginious[saml2,ldap]
 
 .. _config:
 
@@ -158,7 +218,7 @@ INGInious studio, that allows to modify and test your tasks directly in your bro
 that allows to interface with Learning Management System via the LTI_ specification. Any LMS supporting LTI_ is
 compatible. This includes Moodle, edX, among many others.
 
-.. _LTI: http://www.imsglobal.org/LTI/v1p1/ltiIMGv1p1.html
+.. _LTI: https://www.1edtech.org/standards/lti
 
 It is recommended to create a folder for INGInious and subfolders for tasks and backup, e.g.:
 ::
@@ -436,7 +496,7 @@ You can then add virtual host entries in a ``/etc/httpd/vhosts.d/inginious.conf`
         ServerName my_inginious_domain
         LoadModule wsgi_module /usr/lib64/python3.6/site-packages/mod_wsgi/server/mod_wsgi-py36.cpython-36m-x86_64-linux-gnu.so
 
-        WSGIScriptAlias / "/usr/bin/inginious-webapp"
+        WSGIScriptAlias / "/usr/local/lib/python3.6/dist-packages/inginious/frontend/wsgi/webapp.py"
         WSGIScriptReloading On
 
         Alias /static /usr/lib/python3.6/site-packages/inginious/frontend/static
@@ -456,7 +516,7 @@ You can then add virtual host entries in a ``/etc/httpd/vhosts.d/inginious.conf`
         ServerName my_inginious_domain
         LoadModule wsgi_module /usr/lib64/python3.6/site-packages/mod_wsgi/server/mod_wsgi-py35.cpython-35m-x86_64-linux-gnu.so
 
-        WSGIScriptAlias / "/usr/bin/inginious-webdav"
+        WSGIScriptAlias / "/usr/local/lib/python3.6/dist-packages/inginious/frontend/wsgi/webdav.py"
         WSGIScriptReloading On
 
         <Directory "/usr/bin">
@@ -506,7 +566,7 @@ Add virtual host entries in a `/etc/apache2/sites-available/inginious.conf` file
   ::
 
     <VirtualHost *:80>
-        WSGIScriptAlias / "/usr/local/bin/inginious-webapp"
+        WSGIScriptAlias / "/usr/local/lib/python3.6/dist-packages/inginious/frontend/wsgi/webapp.py"
         WSGIScriptReloading On
 
         Alias /static /usr/local/lib/python3.6/dist-packages/inginious/frontend/static
@@ -527,7 +587,7 @@ Add virtual host entries in a `/etc/apache2/sites-available/inginious.conf` file
 
 
     <VirtualHost *:8080>
-            WSGIScriptAlias / "/usr/local/bin/inginious-webdav"
+            WSGIScriptAlias / "/usr/local/lib/python3.6/dist-packages/inginious/frontend/wsgi/webdav.py"
             WSGIScriptReloading On
 
             <Directory "/usr/local/bin">
@@ -621,8 +681,8 @@ An optional web terminal can be used with INGInious to load the remote SSH debug
 To install this tool :
 ::
 
-    $ git clone https://github.com/UCL-INGI/INGInious-xterm
-    $ cd INGInious-xterm && npm install
+    $ git clone https://github.com/INGInious/xterm
+    $ cd xterm && npm install
 
 You can then launch the tool by running:
 ::
@@ -635,5 +695,5 @@ the debug paramaters on the local (see :ref:`ConfigReference`) or remote (see :r
 To make the INGInious frontend aware of that application, update your configuration file by setting the ``webterm``
 field to ``http://bind_hostname:bind_port`` (see :ref:`ConfigReference`).
 
-For more information on this tool, please see `INGInious-xterm <https://github.com/UCL-INGI/INGInious-xterm>`_. Please
+For more information on this tool, please see `INGInious-xterm <https://github.com/INGInious/xterm>`_. Please
 note that INGInious-xterm must be launched using SSL if the frontend is launched using SSL.

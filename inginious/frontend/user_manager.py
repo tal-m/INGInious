@@ -21,6 +21,9 @@ from pymongo import ReturnDocument
 from binascii import hexlify
 import os
 import re
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError
+from flask.sessions import NullSession
 
 
 class AuthInvalidInputException(Exception):
@@ -57,21 +60,6 @@ class AuthMethod(object, metaclass=ABCMeta):
         return None
 
     @abstractmethod
-    def share(self, auth_storage, course, task, submission, language):
-        """
-        :param auth_storage: The session auth method storage dict
-        :return: False if error
-        """
-        return False
-
-    @abstractmethod
-    def allow_share(self):
-        """
-        :return: True if the auth method allow sharing, else false
-        """
-        return False
-
-    @abstractmethod
     def get_name(self):
         """
         :return: The name of the auth method, to be displayed publicly
@@ -86,7 +74,7 @@ class AuthMethod(object, metaclass=ABCMeta):
         return ""
 
 
-UserInfo = namedtuple("UserInfo", ["realname", "email", "username", "bindings", "language", "activated"])
+UserInfo = namedtuple("UserInfo", ["realname", "email", "username", "bindings", "language", "code_indentation", "activated"])
 
 
 class UserManager:
@@ -96,7 +84,7 @@ class UserManager:
         :type superadmins: list(str)
         :param superadmins: list of the super-administrators' usernames
         """
-        self._session = flask.session
+        self._flask_session = flask.session
         self._database = database
         self._superadmins = superadmins
         self._auth_methods = OrderedDict()
@@ -121,6 +109,36 @@ class UserManager:
     ##############################################
     #           User session management          #
     ##############################################
+
+    def session_is_lti(self) -> bool:
+        """ Returns whether the current request comes from an LTI session. """
+        return 'session_id' in flask.request.args or 'lti_session_id' in flask.g or isinstance(flask.session, NullSession)
+
+    @property
+    def _lti_session(self):
+        """ Returns the LTI session dict. """
+        assert self.session_is_lti()
+        if 'lti_session' not in flask.g:
+            if 'session_id' in flask.request.args:
+                flask.g.lti_session = self._database.lti_sessions.find_one(
+                    {'session_id': flask.request.args['session_id']})
+        if 'lti_session' not in flask.g or not flask.g.lti_session:
+            flask.g.lti_session = {}
+        return flask.g.lti_session
+
+    @staticmethod
+    def _lti_session_save(app, response):
+        """ Saves in database the LTI session. This function is a Flask event receiver. """
+        if app.user_manager.session_is_lti():
+            lti_session_id = flask.request.args.get('session_id', flask.g.get('lti_session_id'))
+            app.user_manager._database.lti_sessions.find_one_and_update({'session_id': lti_session_id},
+                                                                        {'$set': flask.g.lti_session}, upsert=True)
+        # TODO(mp): Find whether the session should be dropped instead?
+
+    @property
+    def _session(self):
+        """ Returns the session. """
+        return self._flask_session if not self.session_is_lti() else self._lti_session
 
     def session_logged_in(self):
         """ Returns True if a user is currently connected in this session, False else """
@@ -166,9 +184,7 @@ class UserManager:
                     "realname": realname,
                     "roles": roles,
                     "task": (course_id, task_id),
-                    "outcome_service_url": outcome_service_url,
-                    "outcome_result_id": outcome_result_id,
-                    "consumer_key": consumer_key
+                    <lti version dependent fields>
                 }
 
             where all these data where provided by the LTI consumer, and MAY NOT be equivalent to the data
@@ -176,13 +192,9 @@ class UserManager:
 
             If the current session is not an LTI one, returns None.
         """
-        if "lti" in self._session:
+        if self.session_is_lti() and "lti" in self._session:
             return self._session["lti"]
         return None
-
-    def session_cookieless(self):
-        """ Indicates if the current session is cookieless """
-        return self._session.cookieless
 
     def session_id(self):
         """ Returns the current session id"""
@@ -192,9 +204,13 @@ class UserManager:
         """ Returns the oauth state for login """
         return self._session.setdefault("auth_storage", {})
 
-    def session_language(self):
+    def session_language(self, default="en"):
         """ Returns the current session language """
-        return self._session.get("language", "en")
+        return self._session.get("language", default)
+
+    def session_code_indentation(self):
+        """ Returns the current session code indentation """
+        return self._session.get("code_indentation", "4")
 
     def session_api_key(self):
         """ Returns the API key for the current user. Created on first demand. """
@@ -204,6 +220,11 @@ class UserManager:
         """ Sets the token of the current user in the session, if one is open."""
         if self.session_logged_in():
             self._session["token"] = token
+
+    def set_session_username(self, username):
+        """ Sets the username of the current user in the session, if one is open."""
+        if self.session_logged_in():
+            self._session["username"] = username
 
     def set_session_realname(self, realname):
         """ Sets the real name of the current user in the session, if one is open."""
@@ -218,17 +239,21 @@ class UserManager:
     def set_session_language(self, language):
         self._session["language"] = language
 
-    def _set_session(self, username, realname, email, language, tos_signed):
+    def set_session_code_indentation(self, code_indentation):
+        """ Sets the code indentation of the current user in the session, if one is open."""
+        if self.session_logged_in():
+            self._session["code_indentation"] = code_indentation
+
+    def _set_session(self, user):
         """ Init the session. Preserves potential LTI information. """
         self._session["loggedin"] = True
-        self._session["email"] = email
-        self._session["username"] = username
-        self._session["realname"] = realname
-        self._session["language"] = language
-        self._session["tos_signed"] = tos_signed
+        self._session["email"] = user["email"]
+        self._session["username"] = user["username"]
+        self._session["realname"] = user["realname"]
+        self._session["language"] = user.get("language", "en")
+        self._session["code_indentation"] = user.get("code_indentation", "4")
+        self._session["tos_signed"] = user.get("tos_accepted", False)
         self._session["token"] = None
-        if "lti" not in self._session:
-            self._session["lti"] = None
 
     def _destroy_session(self):
         """ Destroy the session """
@@ -236,32 +261,19 @@ class UserManager:
         self._session["email"] = None
         self._session["username"] = None
         self._session["realname"] = None
+        self._session["code_indentation"] = "4"
         self._session["token"] = None
         self._session["lti"] = None
-        self._session["tos_signed"] = None
+        self._session["tos_signed"] = False
 
-    def create_lti_session(self, user_id, roles, realname, email, course_id, task_id, consumer_key, outcome_service_url,
-                           outcome_result_id, tool_name, tool_desc, tool_url, context_title, context_label):
-        """ Creates an LTI cookieless session. Returns the new session id"""
+    def create_lti_session(self, session_id, session_dict):
+        """ Creates an LTI session. Returns the new session id"""
 
-        self._destroy_session()  # don't forget to destroy the current session
-        session_id = self._session.sid
+        self._session.clear()
+        flask.g.lti_session_id = session_id
+        flask.g.lti_session = {}
 
-        self._session["lti"] = {
-            "email": email,
-            "username": user_id,
-            "realname": realname,
-            "roles": roles,
-            "task": (course_id, task_id),
-            "outcome_service_url": outcome_service_url,
-            "outcome_result_id": outcome_result_id,
-            "consumer_key": consumer_key,
-            "context_title": context_title,
-            "context_label": context_label,
-            "tool_description": tool_desc,
-            "tool_name": tool_name,
-            "tool_url": tool_url
-        }
+        self._session["lti"] = session_dict
 
         return session_id
 
@@ -271,7 +283,7 @@ class UserManager:
              
             Returns True (resp. False) if the login was successful
         """
-        if "lti" not in self._session:
+        if not self.session_is_lti():
             raise Exception("Not an LTI session")
 
         # TODO allow user to be automagically connected if the TC uses the same user id
@@ -301,21 +313,54 @@ class UserManager:
         """
         return self._auth_methods
 
-    def auth_user(self, username, password):
+    def auth_user(self, username, password, do_connect=True):
         """
         Authenticate the user in database
         :param username: Username/Login
         :param password: User password
-        :return: Returns a dict representing the user
+        :param do_connect: indicates if the user must be connected after authentification, True by default
+        :return: Returns a dict representing the user, or None if the authentication was not successful
         """
-        password_hash = self.hash_password(password)
-
         user = self._database.users.find_one(
-            {"username": username, "password": password_hash, "activate": {"$exists": False}})
+            {"username": username, "activate": {"$exists": False}})
 
-        return user if user is not None and self.connect_user(username, user["realname"], user["email"],
-                                                              user["language"],
-                                                              user.get("tos_accepted", False)) else None
+        if user is None:
+            return None
+
+        method, db_hash = user["password"].split("-", 1) if "-" in user["password"] else ("sha512", user["password"])
+
+        if self.verify_hash(db_hash, password, method):
+            if do_connect:
+                self.connect_user(user)
+            return user
+
+    def verify_hash(cls, db_hash, password, method="sha512"):
+        """
+        Verify a hash
+        :param db_hash: The hash to verify
+        :param password: The password to verify
+        :param method: The hash method
+        :return: A boolean if the hash is correct
+        """
+        available_methods = {"sha512": cls.verify_hash_sha512, "argon2id": cls.verify_hash_argon2id}
+
+        if method in available_methods:
+            return available_methods[method](db_hash, password)
+        else:
+            raise AuthInvalidMethodException()
+
+
+    def verify_hash_sha512(cls, db_hash, password):
+        return cls.hash_password_sha512(password) == db_hash
+
+
+    def verify_hash_argon2id(cls, db_hash, password):
+        try:
+            ph = PasswordHasher()
+            return ph.verify(db_hash, password)
+        except VerifyMismatchError:
+            return False
+
 
     def is_user_activated(self, username):
         """
@@ -326,20 +371,27 @@ class UserManager:
             {"username": username, "activate": {"$exists": True, "$nin": [None]}})
         return user is None
 
-    def connect_user(self, username, realname, email, language, tos_accepted):
+    def connect_user(self, user):
         """ Opens a session for the user
 
-        :param username: Username
-        :param realname: User real name
-        :param email: User email
+        :param user : a dict representing the user, it contains the data of the user.
+            It must at least contain the following fields:
+            - realname
+            - email
+            - username
         """
 
-        self._database.users.update_one({"email": email},
-                                        {"$set": {"realname": realname, "username": username, "language": language}},
+        if not all(key in user for key in ["realname", "email", "username"]):
+            raise AuthInvalidInputException()
+
+        self._database.users.update_one({"email": user["email"]},
+                                        {"$set": {"realname": user["realname"], "username": user["username"],
+                                                  "language": user.get("language", "en")}},
                                         upsert=True)
+
         ip = flask.request.remote_addr
-        self._logger.info("User %s connected - %s - %s - %s", username, realname, email, ip)
-        self._set_session(username, realname, email, language, tos_accepted)
+        self._logger.info("User %s connected - %s - %s - %s", user["username"], user["realname"], user["email"], ip)
+        self._set_session(user)
         return True
 
     def disconnect_user(self):
@@ -350,7 +402,7 @@ class UserManager:
             ip = flask.request.remote_addr
             self._logger.info("User %s disconnected - %s - %s - %s", self.session_username(), self.session_realname(),
                               self.session_email(), ip)
-        self._destroy_session()
+        self._session.clear()
 
     def get_users_count(self):
         return self._database.users.estimated_document_count()
@@ -368,7 +420,8 @@ class UserManager:
         infos = self._database.users.find(query).skip(skip).limit(limit)
 
         retval = {info["username"]: UserInfo(info["realname"], info["email"], info["username"], info["bindings"],
-                                             info["language"], "activate" not in info) for info in infos}
+                                             info["language"], info["code_indentation"], "activate" not in info)
+                  for info in infos}
         return retval
 
     def get_user_info(self, username) -> Optional[UserInfo]:
@@ -455,8 +508,7 @@ class UserManager:
 
         if user_profile and not self.session_logged_in():
             # Sign in
-            self.connect_user(user_profile["username"], user_profile["realname"], user_profile["email"],
-                              user_profile["language"], user_profile.get("tos_accepted", False))
+            self.connect_user(user_profile)
         elif user_profile and self.session_username() == user_profile["username"]:
             # Logged in, refresh fields if found profile username matches session username
             self._database.users.find_one_and_update({"username": self.session_username()},
@@ -487,12 +539,17 @@ class UserManager:
                 else:
                     newusername = username
 
-                self._database.users.insert_one({"username": newusername,
-                                                 "realname": realname,
-                                                 "email": email,
-                                                 "bindings": {auth_id: [username, additional]},
-                                                 "language": self._session.get("language", "en")})
-                self.connect_user(newusername, realname, email, self._session.get("language", "en"), False)
+                user_profile = {"username": newusername, "realname": realname, "email": email,
+                                "bindings": {auth_id: [username, additional]}, "language": self.session_language(),
+                                "code_indentation": self.session_code_indentation(), "tos_accepted": False}
+
+                self._database.users.insert_one({"username": user["username"],
+                                                 "realname": user["realname"],
+                                                 "email": user["email"],
+                                                 "bindings": user["bindings"],
+                                                 "language": user["language"],
+                                                 "code_indentation": user["code_indentation"]})
+                self.connect_user(user_profile)
 
         return True
 
@@ -552,8 +609,9 @@ class UserManager:
                                          "realname": values["realname"],
                                          "email": values["email"],
                                          "password": self.hash_password(values["password"]),
-                                         "bindings": {},
-                                         "language": "en"})
+                                         "bindings": values["bindings"],
+                                         "language": values["language"],
+                                         "code_indentation": values["code_indentation"]})
         return None
 
     ##############################################
@@ -616,6 +674,7 @@ class UserManager:
         retval = {username: {"task_succeeded": 0, "task_grades": [], "grade": 0} for username in usernames}
 
         users_tasks_list = course.get_task_dispenser().get_user_task_list(usernames)
+        users_grade = course.get_task_dispenser().get_course_grades(usernames)
 
         for result in data:
             username = result["_id"]
@@ -624,13 +683,7 @@ class UserManager:
             result["task_grades"] = {dg["taskid"]: dg["grade"] for dg in result["task_grades"] if
                                      dg["taskid"] in visible_tasks}
 
-            total_weight = 0
-            grade = 0
-            for task_id in visible_tasks:
-                total_weight += tasks[task_id].get_grading_weight()
-                grade += result["task_grades"].get(task_id, 0.0) * tasks[task_id].get_grading_weight()
-
-            result["grade"] = round(grade / total_weight) if total_weight > 0 else 0
+            result["grade"] = users_grade[username]
             retval[username] = result
 
         return retval
@@ -683,7 +736,7 @@ class UserManager:
                                                                "submissionid": None, "state": ""}},
                                              upsert=True)
 
-    def update_user_stats(self, username, task, submission, result_str, grade, state, newsub):
+    def update_user_stats(self, username, task, submission, result_str, grade, state, newsub, task_dispenser):
         """ Update stats with a new submission """
         self.user_saw_task(username, submission["courseid"], submission["taskid"])
 
@@ -693,8 +746,8 @@ class UserManager:
                 {"$inc": {"tried": 1, "tokens.amount": 1}})
 
             # Check if the submission is the default download
-            set_default = task.get_evaluate() == 'last' or \
-                          (task.get_evaluate() == 'best' and old_submission.get('grade', 0.0) <= grade)
+            set_default = task_dispenser.get_evaluation_mode(task.get_id()) == 'last' or \
+                          (task_dispenser.get_evaluation_mode(task.get_id()) == 'best' and old_submission.get('grade', 0.0) <= grade)
 
             if set_default:
                 self._database.user_tasks.find_one_and_update(
@@ -705,13 +758,13 @@ class UserManager:
             old_submission = self._database.user_tasks.find_one(
                 {"username": username, "courseid": submission["courseid"], "taskid": submission["taskid"]})
             def_sub = []
-            if task.get_evaluate() == 'best':  # if best, update cache consequently (with best submission)
+            if task_dispenser.get_evaluation_mode(task.get_id()) == 'best':  # if best, update cache consequently (with best submission)
                 def_sub = list(self._database.submissions.find(
                     {"username": username, "courseid": task.get_course_id(), "taskid": task.get_id(),
                      "status": "done"}).sort(
                     [("grade", pymongo.DESCENDING), ("submitted_on", pymongo.DESCENDING)]).limit(1))
 
-            elif task.get_evaluate() == 'last':  # if last, update cache with last submission
+            elif task_dispenser.get_evaluation_mode(task.get_id()) == 'last':  # if last, update cache with last submission
                 def_sub = list(self._database.submissions.find(
                     {"username": username, "courseid": task.get_course_id(), "taskid": task.get_id()})
                                .sort([("submitted_on", pymongo.DESCENDING)]).limit(1))
@@ -749,7 +802,7 @@ class UserManager:
             username = self.session_username()
 
         course = task.get_course()
-        dispenser_filter = course.get_task_dispenser().filter_accessibility(task.get_id(), username)
+        dispenser_filter = course.get_task_dispenser().get_accessibility(task.get_id(), username).after_start()
         return (self.course_is_open_to_user(course, username, lti) and dispenser_filter) \
                or self.has_staff_rights_on_course(task.get_course(), username)
 
@@ -765,27 +818,30 @@ class UserManager:
         if username is None:
             username = self.session_username()
 
+        course = task.get_course()
         # Check if course access is ok
-        course_registered = self.course_is_open_to_user(task.get_course(), username, lti)
+        course_registered = self.course_is_open_to_user(course, username, lti)
         # Check if task accessible to user
-        task_accessible = task.get_accessible_time().is_open()
+        task_accessible = course.get_task_dispenser().get_accessibility(task.get_id(), username).is_open()
         # User has staff rights ?
-        staff_right = self.has_staff_rights_on_course(task.get_course(), username)
+        staff_right = self.has_staff_rights_on_course(course, username)
+        # Is this task a group task .
+        is_group_task = course.get_task_dispenser().get_group_submission(task.get_id())
 
         # Check for group
-        group = self._database.groups.find_one({"courseid": task.get_course_id(), "students": self.session_username()})
+        group = self._database.groups.find_one({"courseid": course.get_id(), "students": self.session_username()})
 
         if not only_check or only_check == 'groups':
-            group_filter = (group is not None and task.is_group_task()) or not task.is_group_task()
+            group_filter = (group is not None and is_group_task) or not is_group_task
         else:
             group_filter = True
 
-        students = group["students"] if (group is not None and task.is_group_task()) else [self.session_username()]
+        students = group["students"] if (group is not None and is_group_task) else [self.session_username()]
 
         # Check for token availability
         enough_tokens = True
         timenow = datetime.now()
-        submission_limit = task.get_submission_limit()
+        submission_limit = course.get_task_dispenser().get_submission_limit(task.get_id())
         if not only_check or only_check == 'tokens':
             if submission_limit == {"amount": -1, "period": -1}:
                 # no token limits
@@ -1048,9 +1104,31 @@ class UserManager:
         return hexlify(os.urandom(40)).decode('utf-8')
 
     @classmethod
-    def hash_password(cls, content):
+    def hash_password_sha512(cls, content):
         """
         :param content: a str input
         :return a hash of str input
         """
         return hashlib.sha512(content.encode("utf-8")).hexdigest()
+
+    @classmethod
+    def hash_password_argon2id(cls, content):
+        """
+        :param content: a str input
+        :return a hash of str input
+        """
+        ph = PasswordHasher()
+        return ph.hash(content)
+
+    @classmethod
+    def hash_password(cls, content):
+        """
+        Encapsulates the other password hashing functions
+        :param content: a str input
+        :return a hash of str input
+        """
+
+        methods = {"argon2id": cls.hash_password_argon2id, "sha512": cls.hash_password_sha512}
+        latest_method = "argon2id"
+
+        return latest_method + "-" + methods[latest_method](content)

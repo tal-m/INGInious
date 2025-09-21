@@ -50,7 +50,7 @@ class MarketplacePage(INGIniousAuthPage):
             except:
                 errors.append(_("User returned an invalid form."))
             if not errors:
-                return redirect(self.app.get_homepath() + "/admin/{}".format(new_courseid))
+                return redirect(self.app.get_path("admin", new_courseid))
         return self.show_page(errors)
 
     def show_page(self, errors=None):
