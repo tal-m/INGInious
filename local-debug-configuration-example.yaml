@@ -1,0 +1,39 @@
+# This configuration uses a keycloak server for authentication but is intended to run locally
+
+backend:  tcp://backend:2000
+backup_directory: /inginious/backups
+local-config:
+    debug_host: localhost 
+mongo_opt:
+    database: INGInious
+    host: db
+plugins: 
+   - plugin_module: "plugins.info_only_problem"
+   - plugin_module: "plugins.team_submission"
+   - plugin_module: "plugins.keycloak_auth"
+     id: oidc
+     server_url: 'https://login.csx.runi.ac.il/'        # Set this to the keycloak instance for authentication
+     client_id: 'inginious'
+     client_secret: 'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX'  # Set this from the keycloak credentials for the client
+     realm_name: 'Classes'
+     name: 'RUNI CSX Keycloak'
+     #- plugin_module: "inginious.frontend.plugins.contests"
+     #
+allow_registration: false
+allow_deletion: false
+superadmins:
+- superadmin
+- talm
+- ohad.fried.student
+
+tasks_directory: /inginious/tasks
+use_minified_js: false
+
+log_level: "DEBUG"
+
+session_parameters:
+  timeout: 86400  # 24 * 60 * 60, # 24 hours in seconds
+  ignore_change_ip: False # change this to True if you want user to keep their session if they change their IP
+  secure: True # change this to True if you only use https
+  secret_key: "0000000000000000000000000000000000000000000000000000000000000000"
+

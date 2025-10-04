@@ -91,8 +91,9 @@ services:
       - ./configuration.deploy.yaml:/inginious/configuration.yaml
       - ./tasks/:/inginious/tasks
       - ./backups/:/inginious/backups
+      - ./plugins/:/inginious/plugins
     ports:
-      - 9000:8080
+      - ${LISTEN_PORT}:8080
     networks:
       - inginious
 
