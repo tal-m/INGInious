@@ -12,14 +12,22 @@ import logging
 import os
 import sys
 from werkzeug.serving import run_simple
+from werkzeug.wsgi import get_input_stream
 
 # If INGInious files are not installed in Python path
 sys.path.append(os.path.dirname(__file__))
 
-from inginious.common.log import init_logging, CustomLogMiddleware
+from inginious.common.log import init_logging
 from inginious.common.base import load_json_or_yaml
 import inginious.frontend.webdav
 
+
+def limited_input_middleware(app):
+    # Ensure wsgi.input is a bounded stream
+    def new_app(environ, start_response):
+        environ['wsgi.input'] = get_input_stream(environ)
+        return app(environ, start_response)
+    return new_app
 
 def main():
     # Parse the paramaters from command line arguments
@@ -56,8 +64,8 @@ def main():
         import flup.server.fcgi as flups
         flups.WSGIServer(application, multiplexed=True, bindAddress=None, debug=False).run()
 
-    # Add static redirection and request log
-    application = CustomLogMiddleware(application, logging.getLogger("inginious.webdav.requests"))
+    # Ensure WsgiDAV receive limited streams for PUT requests
+    application = limited_input_middleware(application)
 
     # Launch the app
     run_simple(host, port, application, use_debugger=config.get("web_debug", False), threaded=True)
