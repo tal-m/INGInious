@@ -23,8 +23,9 @@ services:
     build:
       dockerfile: deploy/inginious-base.containerfile
       args:
-        - VERSION=${VERSION}
-        - REGISTRY=${REGISTRY}
+        VERSION: ${VERSION}
+        REGISTRY: ${REGISTRY}
+        SCM_VERSION: ${SCM_VERSION}
     command: /bin/true
 
   db:
@@ -39,8 +40,9 @@ services:
     build:
       dockerfile: deploy/backend.containerfile
       args:
-        - VERSION=${VERSION}
-        - REGISTRY=${REGISTRY}
+        VERSION: ${VERSION}
+        REGISTRY: ${REGISTRY}
+        SCM_VERSION: ${SCM_VERSION}
     environment:
       AGENT: "tcp://0.0.0.0:2001"
       CLIENT: "tcp://0.0.0.0:2000"
@@ -56,19 +58,20 @@ services:
     build:
       dockerfile: deploy/agent-docker.containerfile
       args:
-        - VERSION=${VERSION}
-        - REGISTRY=${REGISTRY}
+        VERSION: ${VERSION}
+        REGISTRY: ${REGISTRY}
+        SCM_VERSION: ${SCM_VERSION}
     environment:
       BACKEND: "tcp://backend:2001"
     volumes:
      - /var/run/docker.sock:/var/run/docker.sock
      # See https://github.com/INGInious/INGInious/issues/352
-     - ./tasks/:/inginious/tasks
-     - ./backups/:/inginious/backups
+     - ${TASKS_DIR}:/inginious/tasks
+     - ${BACKUPS_DIR}:/inginious/backups
      # See https://github.com/INGInious/INGInious/issues/799
      - /tmp/agent_data/:/tmp/agent_data/
     networks:
-      - inginious
+     - inginious
 
   agent-mcq:
     image: ${REGISTRY}/inginious/core-agent_mcq:${VERSION}
@@ -79,26 +82,28 @@ services:
     build:
       dockerfile: deploy/agent-mcq.containerfile
       args:
-        - VERSION=${VERSION}
-        - REGISTRY=${REGISTRY}
+        VERSION: ${VERSION}
+        REGISTRY: ${REGISTRY}
+        SCM_VERSION: ${SCM_VERSION}
     environment:
       BACKEND: "tcp://backend:2001"
     volumes:
      # See https://github.com/INGInious/INGInious/issues/352
-     - ./tasks/:/inginious/tasks
-     - ./backups/:/inginious/backups
+     - ${TASKS_DIR}:/inginious/tasks
+     - ${BACKUPS_DIR}:/inginious/backups
      # See https://github.com/INGInious/INGInious/issues/799
      - /tmp/agent_data/:/tmp/agent_data/
     networks:
-      - inginious
+     - inginious
 
   frontend:
     image: ${REGISTRY}/inginious/core-frontend:${VERSION}
     build:
       dockerfile: deploy/frontend.containerfile
       args:
-        - VERSION=${VERSION}
-        - REGISTRY=${REGISTRY}
+        VERSION: ${VERSION}
+        REGISTRY: ${REGISTRY}
+        SCM_VERSION: ${SCM_VERSION}
     depends_on:
       - backend
       - agent-docker
@@ -108,10 +113,10 @@ services:
     environment:
       - INGINIOUS_WEBAPP_HOST=0.0.0.0
     volumes:
-      - ./configuration.deploy.yaml:/inginious/configuration.yaml
-      - ./tasks/:/inginious/tasks
-      - ./backups/:/inginious/backups
-      - ./plugins/:/inginious/plugins
+      - ${CONFIG_FILE}:/inginious/configuration.yaml
+      - ${TASKS_DIR}:/inginious/tasks
+      - ${BACKUPS_DIR}:/inginious/backups
+      - ${PLUGINS_DIR}:/inginious/plugins
     ports:
       - ${LISTEN_PORT}:8080
     networks:
