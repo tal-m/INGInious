@@ -35,5 +35,7 @@ session_parameters:
   timeout: 86400  # 24 * 60 * 60, # 24 hours in seconds
   ignore_change_ip: False # change this to True if you want user to keep their session if they change their IP
   secure: True # change this to True if you only use https
+  
+  # Change the following to some random hex string (of the same length)
   secret_key: "0000000000000000000000000000000000000000000000000000000000000000"
 
