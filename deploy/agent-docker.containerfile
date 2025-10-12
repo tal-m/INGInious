@@ -18,4 +18,4 @@ RUN --mount=source=.git,target=.git,type=bind \
     fi && \
     pip3 install --no-cache-dir -e .
 
-CMD ["sh", "-c", "python3 -m inginious.scripts.agent_docker ${BACKEND} --tmpdir=/tmp/agent_data/"]
+CMD ["sh", "-c", "python3 -m inginious.scripts.agent_docker ${BACKEND} --tmpdir=/tmp/agent_data/ ${EXTRA_AGENT_DOCKER_ARGS}"]
