@@ -1,0 +1,9 @@
+services:
+  minify:
+    build: .
+    volumes:
+      - ../../../inginious:/app
+      - /app/scripts/minify/node_modules
+    working_dir: /app/scripts/minify
+    user: "${ING_UID}:${ING_GID}"
+    command: ["grunt"]
