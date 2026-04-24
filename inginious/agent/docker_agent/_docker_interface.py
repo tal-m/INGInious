@@ -273,7 +273,7 @@ class DockerInterface(object):  # pragma: no cover
         """
         :return: dict of runtime: path_to_runtime
         """
-        return {name: x["path"] for name, x in self._docker.info()["Runtimes"].items()}
+        return {name: x.get("path",x.get("runtimeType", "unknown-runtime-path")) for name, x in self._docker.info()["Runtimes"].items()}
 
 class FixDockerSocket():  # pragma: no cover
     """
