@@ -110,7 +110,7 @@ class DockerInterface(object):  # pragma: no cover
             return None
 
     def create_container(self, image, network_grading, mem_limit, task_path, sockets_path,
-                         course_common_path, course_common_student_path, fd_limit, runtime: str, ports=None):
+                         course_common_path, course_common_student_path, fd_limit, runtime: str, ports=None, cap_add=[]):
         """
         Creates a container.
         :param image: env to start (name/id of a docker image)
@@ -123,6 +123,7 @@ class DockerInterface(object):  # pragma: no cover
         :param fd_limit: Tuple with soft and hard limits per slot for FS
         :param runtime: name of the docker runtime to use
         :param ports: dictionary in the form {docker_port: external_port}
+        :param cap_add: additional capabilities to pass to the container
         :return: the container id
         """
         task_path = os.path.abspath(task_path)
@@ -150,13 +151,14 @@ class DockerInterface(object):  # pragma: no cover
                 course_common_student_path: {'bind': '/course/common/student', 'mode': 'ro'}
             },
             runtime=runtime,
-            ulimits=[nofile_limit]
+            ulimits=[nofile_limit],
+            cap_add=cap_add,
         )
         return response.id
 
     def create_container_student(self, runtime: str, image: str, mem_limit, student_path,
                                  socket_path, systemfiles_path, course_common_student_path,
-                                 parent_runtime: str,fd_limit, share_network_of_container: str=None, ports=None):
+                                 parent_runtime: str, fd_limit, share_network_of_container: str=None, ports=None, cap_add=[]):
         """
         Creates a student container
         :param fd_limit:Tuple with soft and hard limits per slot for FS
@@ -208,6 +210,7 @@ class DockerInterface(object):  # pragma: no cover
                 course_common_student_path: {'bind': '/course/common/student', 'mode': 'ro'}
             },
             runtime=runtime,
+            cap_add=cap_add,
             ulimits=[nofile_limit]
         )
 

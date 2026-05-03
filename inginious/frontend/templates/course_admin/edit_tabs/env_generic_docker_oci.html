@@ -30,6 +30,22 @@
         </label></div>
     </div>
 </div>
+<div class="form-group row">
+    <label  class="col-sm-4 control-label">{{ _("Allow dangerous capabilities inside the grading container? (Kata only)") }} <i class="fa fa-question-circle" aria-hidden="true" data-toggle="tooltip" data-placement="top" title="{{ _("Allows container escape in standard docker containers!.") }}" style="font-size: 20px"></i></label>
+
+    <div class="col-sm-8">
+        <label for="{{env_id}}-cap-dac-read-search" class="col-sm2 control-label">{{ _("CAP_DAC_READ_SEARCH") }}</label>
+        <div class="checkbox"><label>
+            <input type="checkbox" id="{{env_id}}-cap-dac-read-search" name="envparams[{{env_id}}][DAC_READ_SEARCH]"
+                   {{'checked="checked"' if env_params.get('DAC_READ_SEARCH',False) }} />&nbsp;
+        </label></div>
+        <label for="{{env_id}}-cap-sys-ptrace" class="col-sm2 control-label">{{ _("CAP_SYS_PTRACE") }}</label>
+        <div class="checkbox"><label>
+            <input type="checkbox" id="{{env_id}}-cap-sys-ptrace" name="envparams[{{env_id}}][SYS_PTRACE]"
+                   {{'checked="checked"' if env_params.get('SYS_PTRACE',False) }} />&nbsp;
+        </label></div>
+    </div>
+</div>
 
 <div class="form-group row">
     <label for="{{env_id}}-run-cmd" class="col-sm-4 control-label">{{ _("Custom command to be run in container <small>(instead of running the run script)</small>") | safe}}</label>

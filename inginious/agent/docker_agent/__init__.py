@@ -21,6 +21,7 @@ from inginious.agent.docker_agent._docker_interface import DockerInterface
 from inginious.agent import Agent, CannotCreateJobException
 from inginious.agent.docker_agent._docker_runtime import DockerRuntime
 from inginious.agent.docker_agent._timeout_watcher import TimeoutWatcher
+from inginious.common.constants import EXTRA_CAPABILITIES
 from inginious.common.asyncio_utils import AsyncIteratorWrapper, AsyncProxy
 from inginious.common.base import id_checker, id_checker_tests
 from inginious.common.filesystems import FileSystemProvider
@@ -50,6 +51,7 @@ class DockerRunningJob:
     assigned_external_ports: List[int]
     student_containers: Set[str]  # container ids of student containers
     enable_network: bool
+    cap_add: List[str] # Additional capabilities
 
 
 @dataclass
@@ -61,7 +63,6 @@ class DockerRunningStudentContainer:
     ssh: bool
     ports: Dict[int, int]  # internal port -> external port mapping
     assigned_external_ports: List[int]
-
 
 class DockerAgent(Agent):
     def __init__(self, context, backend_addr, friendly_name, concurrency, tasks_fs: FileSystemProvider,
@@ -286,8 +287,15 @@ class DockerAgent(Agent):
         environment_type = message.environment_type
         environment_name = message.environment
 
+
+        cap_add = []
+
         try:
             enable_network = message.environment_parameters.get("network_grading", False)
+            for cap in EXTRA_CAPABILITIES:
+                if message.environment_parameters.get(cap, False):
+                    cap_add.append(cap)
+
             limits = message.environment_parameters.get("limits", {})
             time_limit = int(limits.get("time", 30))
             hard_time_limit = int(limits.get("hard_time", None) or time_limit * 3)
@@ -389,7 +397,7 @@ class DockerAgent(Agent):
                                                               sockets_path, course_common_path,
                                                               course_common_student_path,
                                                               self.__get_fd_limit(), runtime,
-                                                              ports)
+                                                              ports, cap_add)
         except Exception as e:
             self._logger.warning("Cannot create container! %s", str(e), exc_info=True)
             shutil.rmtree(container_path)
@@ -419,7 +427,8 @@ class DockerAgent(Agent):
             run_cmd=run_cmd,
             assigned_external_ports=list(ports.values()),
             student_containers=set(),
-            enable_network=enable_network
+            enable_network=enable_network,
+            cap_add=cap_add,
         )
 
         self._containers_running[container_id] = info
@@ -449,7 +458,7 @@ class DockerAgent(Agent):
 
     async def create_student_container(self, parent_info, socket_id, environment_name,
                                        memory_limit, time_limit, hard_time_limit, share_network, write_stream, ssh,
-                                       run_as_root):
+                                       run_as_root, cap_add):
         """
         Creates a new student container.
         :param write_stream: stream on which to write the return value of the container (with a correctly formatted msgpack message)
@@ -499,7 +508,8 @@ class DockerAgent(Agent):
                                                                            parent_info.environment_type,
                                                                            self.__get_fd_limit(),
                                                                            parent_info.container_id if share_network else None,
-                                                                           ports)
+                                                                           ports,
+                                                                           cap_add=cap_add)
             except Exception as e:
                 self._logger.exception("Cannot create student container!")
                 await self._write_to_container_stdin(write_stream, {"type": "run_student_retval", "retval": 254,
@@ -517,7 +527,7 @@ class DockerAgent(Agent):
                 write_stream=write_stream,
                 ssh=ssh,
                 ports=ports,
-                assigned_external_ports=list(ports.values())
+                assigned_external_ports=list(ports.values()),
             )
 
             parent_info.student_containers.add(container_id)
@@ -679,6 +689,7 @@ class DockerAgent(Agent):
                             socket_id = msg["socket_id"]
                             ssh = msg["ssh"]
                             run_as_root = msg["run_as_root"]
+                            cap_add = msg.get("cap_add", [])
                             assert "/" not in socket_id  # ensure task creator do not try to break the agent :-(
                             if ssh and not (info.enable_network and "ssh" in info.environment_type and self._ssh_allowed):
                                 self._logger.error(
@@ -686,11 +697,19 @@ class DockerAgent(Agent):
                                     info.job_id)
                                 self._create_safe_task(self.handle_job_closing(info.container_id, -1,
                                                                                manual_feedback="ssh for student requires to allow ssh and internet access in the task environment configuration tab!"))
+                            elif not set(info.cap_add).issuperset(cap_add):
+                                requested_caps = ",".join(cap_add)
+                                self._logger.error(
+                                    f"Exception: adding capabilities [%s] for student requires these to be enabled in the task %s environment configuration tab",
+                                    requested_caps,
+                                    info.job_id)
+                                self._create_safe_task(self.handle_job_closing(info.container_id, -1,
+                                                                               manual_feedback=f"adding capabilities [{requested_caps}] for student requires these to be enabled in the task environment configuration tab"))
                             else:
                                 self._create_safe_task(
                                     self.create_student_container(info, socket_id, environment, memory_limit,
                                                                   time_limit, hard_time_limit, share_network,
-                                                                  write_stream, ssh, run_as_root))
+                                                                  write_stream, ssh, run_as_root, cap_add))
 
                         elif msg["type"] == "run_student_init":  # We use non docker-docker communication !
                             if msg["student_container_id"] not in student_containers_streams:

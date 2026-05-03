@@ -17,7 +17,7 @@ from werkzeug.exceptions import NotFound
 
 from inginious.frontend.tasks import _migrate_from_v_0_6
 from inginious.frontend.pages.course_admin.utils import INGIniousAdminPage
-
+from inginious.common.constants import EXTRA_CAPABILITIES
 from inginious.common.base import dict_from_prefix, id_checker
 from inginious.common.exceptions import TaskNotFoundException
 from inginious.frontend.pages.course_admin.task_edit_file import CourseTaskFiles
@@ -142,6 +142,15 @@ class CourseEditTask(INGIniousAdminPage):
 
             # Network grading
             data["network_grading"] = "network_grading" in data
+
+            # Extra Capabilities
+            cap_add = []
+            for cap in EXTRA_CAPABILITIES:
+                if cap.lower() in data:
+                    cap_add.append(cap)
+
+            data["cap_add"] = cap_add
+
 
 
         except Exception as message:

@@ -19,6 +19,11 @@ import asyncio
 from inginious.common.entrypoints import get_args_and_filesystem
 from inginious.agent.docker_agent import DockerAgent, DockerRuntime
 
+# ## --- Allow pycharm debugging ---
+# import pydevd_pycharm
+# # Connect back to PyCharm running on the host machine
+# pydevd_pycharm.settrace('host.docker.internal', port=5678, stdout_to_server=True, stderr_to_server=True)
+## --------------------------------
 
 def check_range(value):
     value = value.split("-")

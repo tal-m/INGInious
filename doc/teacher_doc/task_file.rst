@@ -30,6 +30,8 @@ subdirectory.
         memory: 128
     environment: default
     network_grading: False
+    SYS_PTRACE: False
+    DAC_READ_SEARCH: False
 
 
 -   ``author``, ``context``, ``order``, ``name``, ``language`` and ``header`` are only needed
@@ -89,6 +91,12 @@ subdirectory.
 
 -   ``network_grading`` indicates if the grading container should have access to the net. This
     is not the case by default.
+
+-   ``SYS_PTRACE`` indicates if the grading container should have the CAP_SYS_PTRACE capability.
+    This is a dangerous capability that seriously weakens sandboxing (should only be used in Kata containers)
+
+-   ``DAC_READ_SEARCH`` indicates if the grading container should have the CAP_DAC_READ_SEARCH capability.
+    This is a dangerous capability that seriously weakens sandboxing (should only be used in Kata containers)
 
 -  ``evaluate`` indicates the submission that must be used for evaluation. This can be either:
 
