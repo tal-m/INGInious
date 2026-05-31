@@ -23,13 +23,6 @@ from inginious.common.log import init_logging
 from inginious.common.base import load_json_or_yaml
 import inginious.frontend.app
 
-## --- Allow pycharm debugging ---
-import pydevd_pycharm
-# Connect back to PyCharm running on the host machine
-pydevd_pycharm.settrace('host.docker.internal', port=5678, stdout_to_server=True, stderr_to_server=True)
-## --------------------------------
-
-
 def main():
     # Parse the paramaters from command line arguments
     parser = argparse.ArgumentParser()

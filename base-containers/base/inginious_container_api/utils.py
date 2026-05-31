@@ -311,13 +311,16 @@ def handle_outputs_helper(output, socket_id, output_type, lock, event_loop, cont
 
 def read_block(bin_file, chunk_size):
     """ Returns a chunk of size up to chunk_size bytes """
-    chunk = bin_file.read(chunk_size)
-    while not chunk:
-        chunk_size = chunk_size // 2
+    try:
         chunk = bin_file.read(chunk_size)
-        if len(chunk) == 0:  # Only happens when the bin_file (pipe) is closed
-            return False
-    return chunk
+        while not chunk:
+            chunk_size = chunk_size // 2
+            chunk = bin_file.read(chunk_size)
+            if len(chunk) == 0:  # Only happens when the bin_file (pipe) is closed
+                return False
+        return chunk
+    except: # Sometimes pipe close apparently causes an exception (maybe only with Kata containers?)
+        return False
 
 def scripts_isolation(isolate):
     """ Make the script directory isolated or not from the student """

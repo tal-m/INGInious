@@ -202,7 +202,8 @@ class INGIniousMainRunner:
                                          "share_network": message["share_network"],
                                          "socket_id": message["socket_id"],
                                          "ssh": message["ssh"],
-                                         "run_as_root": message["run_as_root"]})
+                                         "run_as_root": message["run_as_root"],
+                                         "cap_add": message.get("cap_add", [])})
                 return False
             if message["type"] == "run_student_init":  # This message may be sent from run_student to transfer to the student_container via the agent (only when starting a kata student_container)
                 await self.write_stdout({"type": "run_student_init",

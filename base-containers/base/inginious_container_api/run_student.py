@@ -20,7 +20,8 @@ def run_student(cmd, container=None,
         time_limit=0, hard_time_limit=0,
         memory_limit=0, share_network=False,
         working_dir=None, stdin=None, stdout=None, stderr=None,
-        signal_handler_callback=None, ssh=False, start_student_as_root=False, teardown_script=""):
+        signal_handler_callback=None, ssh=False, start_student_as_root=False, teardown_script="",
+        cap_add: list[str] = []):
     """
     Run a command inside a student container
 
@@ -47,6 +48,8 @@ def run_student(cmd, container=None,
                         Default is False. This is a Beta feature and should not be used yet.
     :param teardown_script:  command to be ran (as a string, with parameters) in the student container before closing it.
                             This parameter is mainly useful when ssh is set to True.
+    :param cap_add: List of capabilities to add to the student container. Each capability is a string of the form "NAME", without leading "CAP" (e.g., "DAC_READ_SEARCH")
+                    These must also be set in the grading environment or an exception will be raised.
     :remark Calling run_student on a grading container running as root with Kata is not a possible feature yet.
     :return: the return value of the calling process. There are special values:
         - 251 means that run_student is not available in this container/environment
@@ -72,7 +75,7 @@ def run_student(cmd, container=None,
     try:
 
         server, socket_id, socket_path, path = create_student_socket(both_same_kernel)
-        zmq_socket, student_container_id = start_student_container(container, time_limit, hard_time_limit, memory_limit, share_network, socket_id, ssh, start_student_as_root)
+        zmq_socket, student_container_id = start_student_container(container, time_limit, hard_time_limit, memory_limit, share_network, socket_id, ssh, start_student_as_root, cap_add)
         connection = send_initial_command(socket_id, server, stdin, stdout, stderr, zmq_socket, student_container_id, cmd, teardown_script, working_dir, ssh, user, both_same_kernel)
         allow_to_send_signals(signal_handler_callback, connection, student_container_id, both_same_kernel)
         handle_ssh(ssh, connection, student_container_id, both_same_kernel)
@@ -187,7 +190,7 @@ def create_student_socket(both_dockers):
         return None, socket_id, socket_path, path
 
 
-def start_student_container(container, time_limit, hard_time_limit, memory_limit, share_network, socket_id, ssh, run_as_root):
+def start_student_container(container, time_limit, hard_time_limit, memory_limit, share_network, socket_id, ssh, run_as_root, cap_add = []):
     """ Ask the docker agent to create the student container """
     context = zmq.Context()
     zmq_socket = context.socket(zmq.REQ)
@@ -195,7 +198,8 @@ def start_student_container(container, time_limit, hard_time_limit, memory_limit
     zmq_socket.send(msgpack.dumps({"type": "run_student", "environment": container,
                                    "time_limit": time_limit, "hard_time_limit": hard_time_limit,
                                    "memory_limit": memory_limit, "share_network": share_network,
-                                   "socket_id": socket_id, "ssh": ssh, "run_as_root": run_as_root},
+                                   "socket_id": socket_id, "ssh": ssh, "run_as_root": run_as_root,
+                                   "cap_add": cap_add},
                                   use_bin_type=True))
     # Check if the container was correctly started
     message = msgpack.loads(zmq_socket.recv(), use_list=False, strict_map_key=False)

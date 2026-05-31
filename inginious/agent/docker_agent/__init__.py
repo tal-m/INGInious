@@ -465,8 +465,8 @@ class DockerAgent(Agent):
         """
         try:
             environment_type = parent_info.environment_type
-            self._logger.debug("Starting new student container... %s/%s %s %s %s", environment_type, environment_name,
-                               memory_limit, time_limit, hard_time_limit)
+            self._logger.debug("Starting new student container... %s/%s %s %s %s [%s]", environment_type, environment_name,
+                               memory_limit, time_limit, hard_time_limit, ",".join(cap_add) if cap_add else "")
 
             if environment_type not in self._containers or environment_name not in self._containers[environment_type]:
                 self._logger.warning("Student container asked for an unknown environment %s/%s",
@@ -690,6 +690,8 @@ class DockerAgent(Agent):
                             ssh = msg["ssh"]
                             run_as_root = msg["run_as_root"]
                             cap_add = msg.get("cap_add", [])
+                            self._logger.debug("  env=%s, mem_limit=%s, time_limit=%s, hard_time_limit=%s, share=%s, ssh=%s, run_as_root=%s, cap_add=%s",
+                                               environment, memory_limit, time_limit, hard_time_limit, share_network, ssh, run_as_root, cap_add)
                             assert "/" not in socket_id  # ensure task creator do not try to break the agent :-(
                             if ssh and not (info.enable_network and "ssh" in info.environment_type and self._ssh_allowed):
                                 self._logger.error(
