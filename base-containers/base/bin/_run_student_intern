@@ -72,20 +72,31 @@ if both_same_kernel:
 else:
     p = subprocess.Popen(shlex.split(start_cmd["command"]), bufsize=0, preexec_fn=set_limits, stdin=subprocess.PIPE,
                          stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    write_lock = threading.Lock()  # Lock to avoid stdout_handler and stderr_handler to write on the stdout_stream at the same time
-    outputs_loop = asyncio.new_event_loop()  # Loop used in other threads
-    stdout_handler = threading.Thread(target=handle_outputs_helper, args=(p.stdout, start_cmd["socket_id"], "stdout", write_lock, event_loop, container_stdout, outputs_loop))
-    stderr_handler = threading.Thread(target=handle_outputs_helper, args=(p.stderr, start_cmd["socket_id"], "stderr", write_lock, event_loop, container_stdout, outputs_loop))
-    stdout_handler.start()
-    stderr_handler.start()
-    try:
-        event_loop.run_until_complete(handle_stdin(container_stdin, p.stdin, p))
-    except RuntimeError as e:  # The loop will be stopped by stdout_handler (causing a RuntimeError)
-        pass
+    
+    # Schedule stdin handling as a background task
+    stdin_task = event_loop.create_task(handle_stdin(container_stdin, p.stdin, p))
+
+    # Offload the blocking process wait AND the output streams to the thread pool
+    stdout_task = event_loop.run_in_executor(None, handle_outputs_helper, p.stdout, start_cmd["socket_id"], "stdout",
+                                             event_loop, container_stdout)
+    stderr_task = event_loop.run_in_executor(None, handle_outputs_helper, p.stderr, start_cmd["socket_id"], "stderr",
+                                             event_loop, container_stdout)
+    wait_task = event_loop.run_in_executor(None, p.wait)
+
+    # Keep the event loop running until all three tasks finish
+    event_loop.run_until_complete(asyncio.gather(wait_task, stdout_task, stderr_task))
+
     logger.info("student code finished !")
     retval = p.wait()
-    stdout_handler.join()
-    stderr_handler.join()
+    stdin_task.cancel() # Stop waiting for input
+
+    # Gracefully close the asyncio streams so OS buffers flush to Docker
+    if container_stdout:
+        container_stdout.close()
+        try:
+            event_loop.run_until_complete(container_stdout.wait_closed())
+        except Exception:
+            pass
 
 logger.info("student container finished running the student code")
 

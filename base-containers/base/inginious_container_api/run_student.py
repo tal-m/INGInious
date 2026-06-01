@@ -245,10 +245,15 @@ def allow_to_send_signals(signal_handler_callback, connection, student_container
             def receive_signal(signum_s):  # send signal to student_container via docker agent
                 signum_data = str(signum_s).zfill(3).encode("utf8")
                 msg = {"type": "student_signal", "student_container_id": student_container_id, "signal_data": signum_data}
-                send_socket = zmq.asyncio.Context().socket(zmq.REQ)
+                ctx = zmq.Context()
+                send_socket = ctx.socket(zmq.REQ)
                 send_socket.connect("ipc:///sockets/main.sock")
-                send_socket.send(msgpack.dumps(msg, use_bin_type=True))
-                send_socket.recv()
+                try:
+                    send_socket.send(msgpack.dumps(msg, use_bin_type=True))
+                    send_socket.recv()
+                finally:
+                    send_socket.close(linger=0)
+                    ctx.term()
         signal_handler_callback(receive_signal)
 
 
@@ -287,12 +292,19 @@ def handle_stdin(stdin, student_container_id):
     my_zmq_socket.connect("ipc:///sockets/main.sock")
     input_file = os.fdopen(stdin, 'rb', buffering=0)
     chunk_size = 512000
-    while True:
-        block = read_block(input_file, chunk_size)
-        if block:
-            my_zmq_socket.send(msgpack.dumps({"type": "stdin", "message": block, "student_container_id": student_container_id}, use_bin_type=True))
-            my_zmq_socket.recv()
-
+    try:
+        while True:
+            block = read_block(input_file, chunk_size)
+            if block:
+                my_zmq_socket.send(
+                    msgpack.dumps({"type": "stdin", "message": block, "student_container_id": student_container_id},
+                                  use_bin_type=True))
+                my_zmq_socket.recv()
+            else:
+                break # Break the loop on EOF
+    finally: # Prevent file descriptor exhaustion
+        my_zmq_socket.close(linger=0)
+        my_context.term()
 
 def unlink_unneeded_files(socket_path, path):
     """ Unlink unneeded files """

@@ -232,14 +232,18 @@ def receive_initial_command(both_dockers, container_stdin, event_loop):
 
 
 async def handle_stdin(reader: asyncio.StreamReader, proc_input, proc):
-    """ Deamon to handle messages from the agent.
+    """ Daemon to handle messages from the agent.
     Used only when both containers are not on a shared kernel"""
+    loop = asyncio.get_event_loop()
     try:
         while not reader.at_eof():
             message = await receive_message(reader)
-            status = handle_stdin_message(message, proc_input, proc)
-            if status == "pipe_closed":
-                return
+            if message["type"] == "stdin":
+                status = await loop.run_in_executor(None, handle_stdin_message, message, proc_input, proc)
+                if status == "pipe_closed":
+                    return
+            elif message["type"] == "student_signal":
+                proc.send_signal(int(message["signal_data"].decode('utf8')))
     except:  # This task will raise an exception when the loop stops
         return
 
@@ -261,15 +265,11 @@ def handle_stdin_message(msg, proc_input, proc):
     """ Process a single message from the agent (stdin message for the student code process or signals messages).
     Used only when both containers are not on a shared kernel """
     try:
-        if msg["type"] == "stdin":
-            input_content = msg["message"]
-            proc_input.write(input_content)
-            proc_input.flush()
-            return "stdin ok"
-        if msg["type"] == "student_signal":
-            signal = msg["signal_data"]
-            proc.send_signal(int(signal.decode('utf8')))
-            return "signal ok"
+        input_content = msg["message"]
+        proc_input.write(input_content)
+        proc_input.flush()
+
+        return "stdin ok"
     except IOError as ioerror:
         if ioerror.errno == errno.EPIPE:
             return "pipe_closed"
@@ -288,7 +288,7 @@ async def stdio():
     return reader, writer
 
 
-def handle_outputs_helper(output, socket_id, output_type, lock, event_loop, container_stdout, outputs_loop):
+def handle_outputs_helper(output, socket_id, output_type, event_loop, container_stdout):
     """ Function launched in its own thread using its own asyncio loop to handle outputs and send them to agent.
     Used only when both containers are not on a shared kernel """
 
@@ -299,15 +299,12 @@ def handle_outputs_helper(output, socket_id, output_type, lock, event_loop, cont
         if output_type == "stdout":
             time.sleep(0.001)  # (arbitrary delay to avoid non-deterministic message order)
         if block:
-            lock.acquire()
             message = {"type": output_type, "socket_id": socket_id, "message": block}
-            outputs_loop.run_until_complete(write_stdout(message, container_stdout))
-            lock.release()
-
-    if output_type == "stdout":  # when the handle_output thread finishes, it stop the loop (to stop handle_stin)
-        outputs_loop.close()
-        event_loop.call_soon_threadsafe(event_loop.stop)
-
+            future = asyncio.run_coroutine_threadsafe(write_stdout(message, container_stdout), event_loop)
+            try:
+                future.result()  # Block until write completes to prevent memory bloat
+            except Exception:
+                pass
 
 def read_block(bin_file, chunk_size):
     """ Returns a chunk of size up to chunk_size bytes """
